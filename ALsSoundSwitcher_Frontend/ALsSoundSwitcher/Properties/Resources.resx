@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -208,6 +208,18 @@ Could not start </value>
   </data>
   <data name="Form1_SetupContextMenu_PreventAutoSwitch" xml:space="preserve">
     <value>Prevent Auto Switching</value>
+  </data>
+  <data name="Form1_SetupContextMenu_DualDefault" xml:space="preserve">
+    <value>Dual Default (Default + Comms)</value>
+  </data>
+  <data name="Form1_SetupContextMenu_LockVolume" xml:space="preserve">
+    <value>Lock Volume</value>
+  </data>
+  <data name="Form1_SetupContextMenu_LockVolumeDevice" xml:space="preserve">
+    <value>Lock Volume Device</value>
+  </data>
+  <data name="Form1_SetupContextMenu_LockDevice" xml:space="preserve">
+    <value>Lock Device</value>
   </data>
   <data name="DeviceUtils_Monitor" xml:space="preserve">
     <value>Monitoring for audio device changes...</value>

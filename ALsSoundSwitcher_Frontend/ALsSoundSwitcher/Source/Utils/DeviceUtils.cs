@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSCore.CoreAudioAPI;
@@ -16,28 +16,37 @@ namespace ALsSoundSwitcher
       Console.WriteLine(Resources.DeviceUtils_Monitor);
     }
 	
-    public static MMDevice GetCurrentDefaultDevice()
+    public static MMDevice GetCurrentDefaultOutputDevice()
     {
-      var dataFlow = UserSettings.Mode == DeviceMode.Output ? DataFlow.Render : DataFlow.Capture;
+      return DeviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+    }
 
-      return DeviceEnumerator.GetDefaultAudioEndpoint(dataFlow, Role.Multimedia);
+    public static MMDevice GetCurrentDefaultInputDevice()
+    {
+      return DeviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
     }
 
     public static void GetDeviceList()
     {
-      ActiveDevices.Clear();
+      ActiveOutputDevices.Clear();
+      ActiveInputDevices.Clear();
 
-      var dataFlow = UserSettings.Mode == DeviceMode.Output ? DataFlow.Render : DataFlow.Capture;
-
-      var deviceCollection = DeviceEnumerator.EnumAudioEndpoints(dataFlow, DeviceState.Active);
-
-      var deviceInfoList = deviceCollection.Select(device => Tuple.Create(device.FriendlyName, device.DeviceID)).ToList();
-
-      UpdateDuplicates(deviceInfoList);
-
-      foreach (var device in deviceInfoList)
+      // get output devices
+      var outputCollection = DeviceEnumerator.EnumAudioEndpoints(DataFlow.Render, DeviceState.Active);
+      var outputInfoList = outputCollection.Select(device => Tuple.Create(device.FriendlyName, device.DeviceID)).ToList();
+      UpdateDuplicates(outputInfoList);
+      foreach (var device in outputInfoList)
       {
-        ActiveDevices.Add(device.Item1, device.Item2);
+        ActiveOutputDevices.Add(device.Item1, device.Item2);
+      }
+
+      // get input devices
+      var inputCollection = DeviceEnumerator.EnumAudioEndpoints(DataFlow.Capture, DeviceState.Active);
+      var inputInfoList = inputCollection.Select(device => Tuple.Create(device.FriendlyName, device.DeviceID)).ToList();
+      UpdateDuplicates(inputInfoList);
+      foreach (var device in inputInfoList)
+      {
+        ActiveInputDevices.Add(device.Item1, device.Item2);
       }
     }
 
@@ -77,9 +86,73 @@ namespace ALsSoundSwitcher
 
     public static int GetVolume()
     {
-      var arg = UserSettings.Mode == DeviceMode.Output ? GetVolumeArg : GetMicLevelArg;
-      var volume = ProcessUtils.RunExe(SetDeviceExe, arg);
+      var volume = ProcessUtils.RunExe(SetDeviceExe, GetVolumeArg);
       return volume;
+    }
+
+    public static int GetMicLevel()
+    {
+      var level = ProcessUtils.RunExe(SetDeviceExe, GetMicLevelArg);
+      return level;
+    }
+
+    public static int GetDeviceLevel(string deviceId)
+    {
+      try
+      {
+        var device = DeviceEnumerator.GetDevice(deviceId);
+        var volume = AudioEndpointVolume.FromDevice(device);
+
+        var level = (int)Math.Round(volume.MasterVolumeLevelScalar * 100);
+
+        volume.Dispose();
+        device.Dispose();
+
+        return level;
+      }
+      catch
+      {
+        return 0;
+      }
+    }
+
+    public static void SetDeviceLevel(string deviceId, int level)
+    {
+      try
+      {
+        var device = DeviceEnumerator.GetDevice(deviceId);
+        var volume = AudioEndpointVolume.FromDevice(device);
+
+        var scalar = Math.Min(100, Math.Max(0, level)) / 100f;
+        volume.SetMasterVolumeLevelScalar(scalar, Guid.Empty);
+
+        volume.Dispose();
+        device.Dispose();
+      }
+      catch
+      {
+        // ignore
+      }
+    }
+
+    public static void EnforceLockedVolumes()
+    {
+      if (!UserSettings.LockVolume || UserSettings.LockedVolumes == null || UserSettings.LockedVolumes.Count == 0)
+      {
+        return;
+      }
+
+      foreach (var kvp in UserSettings.LockedVolumes.ToList())
+      {
+        var deviceId = kvp.Key;
+        var targetLevel = kvp.Value;
+
+        var currentLevel = GetDeviceLevel(deviceId);
+        if (Math.Abs(currentLevel - targetLevel) >= 2)
+        {
+          SetDeviceLevel(deviceId, targetLevel);
+        }
+      }
     }
 
   }

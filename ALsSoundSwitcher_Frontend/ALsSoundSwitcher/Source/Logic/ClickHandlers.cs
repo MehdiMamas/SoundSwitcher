@@ -27,7 +27,8 @@ namespace ALsSoundSwitcher
     private static async void UpdateSliderAndTooltip_Async()
     {
       await Task.Run(() => MenuItemSlider.RefreshValue());
-      await Task.Run(() => SetToolTip(ActiveMenuItemDevice.Text));
+      var deviceText = ActiveMenuItemOutputDevice?.Text ?? "";
+      await Task.Run(() => SetToolTip(deviceText));
     }
 
     private static void HandleCloseOnClick(object sender, ToolStripDropDownClosingEventArgs e)
@@ -79,9 +80,6 @@ namespace ALsSoundSwitcher
         case MouseControlFunction.Refresh:
           ProcessUtils.Restart_ThreadSafe();
           break;
-        case MouseControlFunction.Toggle_Mode:
-          TrySwitchMode(GetNextAvailableMode());
-          break;
         case MouseControlFunction.Volume_Mixer:
           OpenVolumeMixer();
           break;
@@ -89,7 +87,7 @@ namespace ALsSoundSwitcher
           OpenDeviceManager();
           break;
         case MouseControlFunction.Switch_Next_Device:
-          Toggle();
+          ToggleOutput();
           break;
         default:
           throw new ArgumentOutOfRangeException();
@@ -124,9 +122,8 @@ namespace ALsSoundSwitcher
 
     private static void MenuItemLaunchOnStartup_Click(object sender, EventArgs e)
     {
-      var mode = UserSettings.Mode;
       var regResult = UserSettings.LaunchOnStartup ?
-        RegistryUtils.TryDeleteStartupRegistrySetting(mode) : RegistryUtils.TrySaveStartupRegistrySetting(mode);
+        RegistryUtils.TryDeleteStartupRegistrySetting() : RegistryUtils.TrySaveStartupRegistrySetting();
 
       if (regResult == false)
       {
@@ -142,8 +139,11 @@ namespace ALsSoundSwitcher
       RestoreMenus((ToolStripItem)sender);
     }
 
-    private static void menuItem_Click(object sender, EventArgs e)
-    => PerformSwitch((ToolStripMenuItem)sender);
+    private static void menuItemOutput_Click(object sender, EventArgs e)
+      => PerformOutputSwitch((ToolStripMenuItem)sender);
+
+    private static void menuItemInput_Click(object sender, EventArgs e)
+      => PerformInputSwitch((ToolStripMenuItem)sender);
 
     private static void menuItemExit_Click(object sender, EventArgs e)
       => Instance.Close();
@@ -178,50 +178,6 @@ namespace ALsSoundSwitcher
       Config.Save();
     }
 
-    private static void menuItemMode_Click(object sender, EventArgs e)
-      => TrySwitchMode((DeviceMode) ((ToolStripMenuItem) sender).Tag);
-
-    private static void TrySwitchMode(DeviceMode selectedMode)
-    {
-      if (RegistryUtils.DoesStartupRegistrySettingAlreadyExistForThisPath(UserSettings.Mode))
-      {
-        if (RegistryUtils.TryDeleteStartupRegistrySetting(UserSettings.Mode) == false)
-        {
-          return;
-        }
-      }
-
-      if (selectedMode == DeviceMode.Input)
-      {
-        if (PowerShellUtils.VerifyAudioCmdletsAvailability() == false)
-        {
-          return;
-        }
-      }
-
-      UserSettings.Mode = selectedMode;
-
-      Config.Save();
-
-      if (UserSettings.LaunchOnStartup)
-      {
-        RegistryUtils.TrySaveStartupRegistrySetting(selectedMode);
-      }
-
-      Application.Restart();
-    }
-
-    private static DeviceMode GetNextAvailableMode()
-    {
-      var modes = DeviceModeDictionary.Keys.ToList();
-      var nextIndex = modes.IndexOf(UserSettings.Mode) + 1;
-      if (nextIndex >= modes.Count)
-      {
-        nextIndex = 0;
-      }
-      return modes[nextIndex];
-    }
-
     private static void menuItemPreventAutoSwitch_Click(object sender, EventArgs e)
     {
       UserSettings.PreventAutoSwitch = !UserSettings.PreventAutoSwitch;
@@ -229,6 +185,227 @@ namespace ALsSoundSwitcher
       Config.Save();
 
       SetBackgroundForMenuItemPreventAutoSwitch();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemLockDevice_Click(object sender, EventArgs e)
+    {
+      var selectedDeviceId = (string)((ToolStripMenuItem)sender).Tag;
+      var isOutput = ((ToolStripMenuItem)sender).Text.StartsWith(OutputPrefix);
+      
+      if (isOutput)
+      {
+        if (UserSettings.DualDefault)
+        {
+          // toggle output device lock (both default + comms)
+          if (UserSettings.LockedOutputDefaultDeviceId == selectedDeviceId &&
+              UserSettings.LockedOutputCommsDeviceId == selectedDeviceId)
+          {
+            UserSettings.LockedOutputDefaultDeviceId = "";
+            UserSettings.LockedOutputCommsDeviceId = "";
+          }
+          else
+          {
+            UserSettings.LockedOutputDefaultDeviceId = selectedDeviceId;
+            UserSettings.LockedOutputCommsDeviceId = selectedDeviceId;
+
+            // also switch to the locked device now (both roles)
+            ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId);
+          }
+        }
+        else
+        {
+          // DualDefault OFF: alternate between setting Default and Comms
+          var setComms = NextOutputLockIsComms;
+          if (setComms)
+          {
+            if (UserSettings.LockedOutputCommsDeviceId == selectedDeviceId)
+            {
+              UserSettings.LockedOutputCommsDeviceId = "";
+            }
+            else
+            {
+              UserSettings.LockedOutputCommsDeviceId = selectedDeviceId;
+              ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId + " comms");
+              NextOutputLockIsComms = false;
+            }
+          }
+          else
+          {
+            if (UserSettings.LockedOutputDefaultDeviceId == selectedDeviceId)
+            {
+              UserSettings.LockedOutputDefaultDeviceId = "";
+            }
+            else
+            {
+              UserSettings.LockedOutputDefaultDeviceId = selectedDeviceId;
+              ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId + " default");
+              NextOutputLockIsComms = true;
+            }
+          }
+        }
+      }
+      else
+      {
+        if (UserSettings.DualDefault)
+        {
+          // toggle input device lock (both default + comms)
+          if (UserSettings.LockedInputDefaultDeviceId == selectedDeviceId &&
+              UserSettings.LockedInputCommsDeviceId == selectedDeviceId)
+          {
+            UserSettings.LockedInputDefaultDeviceId = "";
+            UserSettings.LockedInputCommsDeviceId = "";
+          }
+          else
+          {
+            UserSettings.LockedInputDefaultDeviceId = selectedDeviceId;
+            UserSettings.LockedInputCommsDeviceId = selectedDeviceId;
+
+            // also switch to the locked device now (both roles)
+            PowerShellUtils.SetInputDeviceCmdlet(selectedDeviceId);
+          }
+        }
+        else
+        {
+          // DualDefault OFF: alternate between setting Default and Comms
+          var setComms = NextInputLockIsComms;
+          if (setComms)
+          {
+            if (UserSettings.LockedInputCommsDeviceId == selectedDeviceId)
+            {
+              UserSettings.LockedInputCommsDeviceId = "";
+            }
+            else
+            {
+              UserSettings.LockedInputCommsDeviceId = selectedDeviceId;
+              PowerShellUtils.SetInputDeviceCmdlet(selectedDeviceId, PowerShellUtils.InputDeviceRoleSwitch.CommsOnly);
+              NextInputLockIsComms = false;
+            }
+          }
+          else
+          {
+            if (UserSettings.LockedInputDefaultDeviceId == selectedDeviceId)
+            {
+              UserSettings.LockedInputDefaultDeviceId = "";
+            }
+            else
+            {
+              UserSettings.LockedInputDefaultDeviceId = selectedDeviceId;
+              PowerShellUtils.SetInputDeviceCmdlet(selectedDeviceId, PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly);
+              NextInputLockIsComms = true;
+            }
+          }
+        }
+      }
+
+      Config.Save();
+
+      SetBackgroundForMenuItemLockDevice();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemLockDeviceClear_Click(object sender, EventArgs e)
+    {
+      UserSettings.LockedOutputDefaultDeviceId = "";
+      UserSettings.LockedOutputCommsDeviceId = "";
+      UserSettings.LockedInputDefaultDeviceId = "";
+      UserSettings.LockedInputCommsDeviceId = "";
+
+      // clear legacy fields too (kept for migration)
+      UserSettings.LockedOutputDeviceId = "";
+      UserSettings.LockedInputDeviceId = "";
+
+      NextOutputLockIsComms = false;
+      NextInputLockIsComms = false;
+
+      Config.Save();
+
+      SetBackgroundForMenuItemLockDevice();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemDualDefault_Click(object sender, EventArgs e)
+    {
+      UserSettings.DualDefault = !UserSettings.DualDefault;
+
+      Config.Save();
+
+      SetBackgroundForMenuItemDualDefault();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemLockVolumeLevel_Click(object sender, EventArgs e)
+    {
+      var level = (int)((ToolStripMenuItem)sender).Tag;
+      
+      if (level == -1)
+      {
+        // Off selected
+        UserSettings.LockVolume = false;
+      }
+      else
+      {
+        UserSettings.LockVolume = true;
+        UserSettings.LockVolumeLevel = level;
+        // apply this level to all locked devices and SET the volume immediately
+        var deviceIds = UserSettings.LockedVolumes.Keys.ToList();
+        foreach (var deviceId in deviceIds)
+        {
+          UserSettings.LockedVolumes[deviceId] = level;
+          DeviceUtils.SetDeviceLevel(deviceId, level);
+        }
+      }
+
+      Config.Save();
+
+      SetBackgroundForMenuItemLockVolume();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemLockVolumeDevice_Click(object sender, EventArgs e)
+    {
+      var selectedDeviceId = (string)((ToolStripMenuItem)sender).Tag;
+      
+      // toggle device in/out of locked list
+      if (UserSettings.LockedVolumes.ContainsKey(selectedDeviceId))
+      {
+        UserSettings.LockedVolumes.Remove(selectedDeviceId);
+      }
+      else
+      {
+        // If lock is enabled, lock device to the selected level. Otherwise, just capture current level.
+        if (UserSettings.LockVolume)
+        {
+          UserSettings.LockedVolumes[selectedDeviceId] = UserSettings.LockVolumeLevel;
+          DeviceUtils.SetDeviceLevel(selectedDeviceId, UserSettings.LockVolumeLevel);
+        }
+        else
+        {
+          var currentVolume = DeviceUtils.GetDeviceLevel(selectedDeviceId);
+          UserSettings.LockedVolumes[selectedDeviceId] = currentVolume;
+        }
+      }
+
+      Config.Save();
+
+      SetBackgroundForMenuItemLockVolumeDevice();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemLockVolumeDeviceClear_Click(object sender, EventArgs e)
+    {
+      // only clear volume locks
+      UserSettings.LockedVolumes.Clear();
+
+      Config.Save();
+
+      SetBackgroundForMenuItemLockVolumeDevice();
 
       RestoreMenus((ToolStripItem)sender);
     }

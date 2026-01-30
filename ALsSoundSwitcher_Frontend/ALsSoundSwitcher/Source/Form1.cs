@@ -26,17 +26,9 @@ namespace ALsSoundSwitcher
         NotifyUserOfConfigReadFail();
       }
 
-      if (Globals.UserSettings.Mode == DeviceMode.Input)
-      {
-        if (PowerShellUtils.VerifyAudioCmdletsAvailability() == false)
-        {
-          Globals.UserSettings.Mode = DeviceMode.Output;
-        }
-      }
-
       if (Globals.UserSettings.LaunchOnStartup)
       {
-        if (RegistryUtils.DoesStartupRegistrySettingAlreadyExistForThisPath(Globals.UserSettings.Mode) == false)
+        if (RegistryUtils.DoesStartupRegistrySettingAlreadyExistForThisPath() == false)
         {
           Globals.UserSettings.LaunchOnStartup = false;
           Config.Save();
@@ -44,6 +36,14 @@ namespace ALsSoundSwitcher
       }
 
       SetupUI();
+
+      if (Globals.VolumeLockTimer == null)
+      {
+        Globals.VolumeLockTimer = new Timer();
+        Globals.VolumeLockTimer.Interval = 500;
+        Globals.VolumeLockTimer.Tick += (_, _) => DeviceUtils.EnforceLockedVolumes();
+        Globals.VolumeLockTimer.Start();
+      }
 
       Minimize();
 
@@ -55,7 +55,7 @@ namespace ALsSoundSwitcher
 
       FileWatcher.Run();
 
-      KeyWatcher.Run(Toggle);
+      KeyWatcher.Run(ToggleOutput);
     }
 
     private void NotifyUserOfConfigReadFail()

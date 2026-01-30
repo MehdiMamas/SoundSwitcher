@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows.Forms;
 using ALsSoundSwitcher.Properties;
 using static ALsSoundSwitcher.Globals;
@@ -7,24 +8,17 @@ namespace ALsSoundSwitcher
 {
   public partial class Form1
   {
-    private static void PerformSwitch(ToolStripMenuItem menuItem)
+    private static void PerformOutputSwitch(ToolStripMenuItem menuItem)
     {
       try
       {
         WeAreSwitching = true;
 
         var deviceId = (string) menuItem.Tag;
+        var args = UserSettings.DualDefault ? deviceId : deviceId + " default";
+        ProcessUtils.RunExe(SetDeviceExe, args);
 
-        if (UserSettings.Mode == DeviceMode.Output)
-        {
-          ProcessUtils.RunExe(SetDeviceExe, deviceId);
-        }
-        else
-        {
-          PowerShellUtils.SetInputDeviceCmdlet(deviceId);
-        }
-
-        ActiveMenuItemDevice = menuItem;
+        ActiveMenuItemOutputDevice = menuItem;
 
         var deviceName = menuItem.Text;
 
@@ -36,7 +30,7 @@ namespace ALsSoundSwitcher
 
         MenuItemSlider.RefreshValue();
 
-        NotifyUserOfSwitchResult(deviceName);
+        NotifyUserOfSwitchResult(deviceName, true);
       }
       catch (Exception ex)
       {
@@ -44,41 +38,61 @@ namespace ALsSoundSwitcher
         
         Console.WriteLine(ex.ToString());
 
-        NotifyUserOfSwitchResult();
+        NotifyUserOfSwitchResult(null, true);
       }
     }
 
-    private static void Toggle()
+    private static void PerformInputSwitch(ToolStripMenuItem menuItem)
     {
-      if (ActiveDevices.Count == 0)
+      try
+      {
+        WeAreSwitching = true;
+
+        var deviceId = (string) menuItem.Tag;
+        PowerShellUtils.SetInputDeviceCmdlet(deviceId);
+
+        ActiveMenuItemInputDevice = menuItem;
+
+        var deviceName = menuItem.Text;
+
+        SetActiveMenuItemMarkers();
+
+        NotifyUserOfSwitchResult(deviceName, false);
+      }
+      catch (Exception ex)
+      {
+        WeAreSwitching = false;
+        
+        Console.WriteLine(ex.ToString());
+
+        NotifyUserOfSwitchResult(null, false);
+      }
+    }
+
+    private static void ToggleOutput()
+    {
+      if (ActiveOutputDevices.Count == 0)
       {
         return;
       }
 
-      var items = BaseMenu.Items;
+      var items = BaseMenu.Items.OfType<ToolStripMenuItem>()
+        .Where(it => it.Text.StartsWith(OutputPrefix))
+        .ToList();
 
-      var index = items.IndexOf(ActiveMenuItemDevice);
-      while (true)
-      {
-        ++index;
-        if (index == items.Count)
-        {
-          index = 0;
-        }
+      if (items.Count == 0) return;
 
-        if (items[index].Tag != null)
-        {
-          PerformSwitch((ToolStripMenuItem)items[index]);
-          return;
-        }
-      }
+      var currentIndex = items.IndexOf(ActiveMenuItemOutputDevice);
+      var nextIndex = (currentIndex + 1) % items.Count;
+
+      PerformOutputSwitch(items[nextIndex]);
     }
 
-    private static void NotifyUserOfSwitchResult(string deviceName = null)
+    private static void NotifyUserOfSwitchResult(string deviceName, bool isOutput)
     {
       if (deviceName != null)
       {
-        var title = UserSettings.Mode == DeviceMode.Output
+        var title = isOutput
           ? Resources.Form1_PerformSwitch_Switched_Audio_Output_Device
           : Resources.Form1_PerformSwitch_Switched_Audio_Input_Device;
 

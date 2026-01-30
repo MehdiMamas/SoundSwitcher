@@ -34,6 +34,29 @@ namespace ALsSoundSwitcher
 
       UserSettings = JsonConvert.DeserializeObject<Settings>(jsonString);
 
+      // ensure dictionary is initialized
+      if (UserSettings.LockedVolumes == null)
+      {
+        UserSettings.LockedVolumes = new Dictionary<string, int>();
+      }
+
+      // migrate legacy device lock fields into role-specific locks (one-time compatibility)
+      if (string.IsNullOrEmpty(UserSettings.LockedOutputDefaultDeviceId) &&
+          string.IsNullOrEmpty(UserSettings.LockedOutputCommsDeviceId) &&
+          !string.IsNullOrEmpty(UserSettings.LockedOutputDeviceId))
+      {
+        UserSettings.LockedOutputDefaultDeviceId = UserSettings.LockedOutputDeviceId;
+        UserSettings.LockedOutputCommsDeviceId = UserSettings.LockedOutputDeviceId;
+      }
+
+      if (string.IsNullOrEmpty(UserSettings.LockedInputDefaultDeviceId) &&
+          string.IsNullOrEmpty(UserSettings.LockedInputCommsDeviceId) &&
+          !string.IsNullOrEmpty(UserSettings.LockedInputDeviceId))
+      {
+        UserSettings.LockedInputDefaultDeviceId = UserSettings.LockedInputDeviceId;
+        UserSettings.LockedInputCommsDeviceId = UserSettings.LockedInputDeviceId;
+      }
+
       TryUpdateFileStructure();
 
       SettingsHash = jsonString.GetHashCode();
@@ -54,16 +77,7 @@ namespace ALsSoundSwitcher
 
     public static void Save()
     {
-      var jsonDict = new Dictionary<string, object>();
-
-      foreach (var setting in typeof(Settings).GetProperties())
-      {
-        var key = setting.Name;
-        var value = setting.GetValue(UserSettings).ToString();
-        jsonDict[key] = value;
-      }
-
-      var jsonString = JsonConvert.SerializeObject(jsonDict, Formatting.Indented);
+      var jsonString = JsonConvert.SerializeObject(UserSettings, Formatting.Indented);
 
       using var sw = File.CreateText(ConfigFile);
       sw.Write(jsonString);

@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace ALsSoundSwitcher
@@ -15,13 +15,13 @@ namespace ALsSoundSwitcher
 
     public void SetColours(ColourPack colourPack)
     {
-      ColorMenuBorder = colourPack.ColorMenuBorder;
-      ColorMenuItemSelected = colourPack.ColorMenuItemSelected;
-      ColorBackground = colourPack.ColorBackground;
-      ColorSeparator = colourPack.ColorSeparator;
-      ColorStatusStripGradient = colourPack.ColorStatusStripGradient;
-      ColorButtonSelected = colourPack.ColorButtonSelected;
-      ColorButtonPressed = colourPack.ColorButtonPressed;
+      if (!colourPack.ColorMenuBorder.IsEmpty) ColorMenuBorder = colourPack.ColorMenuBorder;
+      if (!colourPack.ColorMenuItemSelected.IsEmpty) ColorMenuItemSelected = colourPack.ColorMenuItemSelected;
+      if (!colourPack.ColorBackground.IsEmpty) ColorBackground = colourPack.ColorBackground;
+      if (!colourPack.ColorSeparator.IsEmpty) ColorSeparator = colourPack.ColorSeparator;
+      if (!colourPack.ColorStatusStripGradient.IsEmpty) ColorStatusStripGradient = colourPack.ColorStatusStripGradient;
+      if (!colourPack.ColorButtonSelected.IsEmpty) ColorButtonSelected = colourPack.ColorButtonSelected;
+      if (!colourPack.ColorButtonPressed.IsEmpty) ColorButtonPressed = colourPack.ColorButtonPressed;
     }
 
     public override Color ToolStripDropDownBackground => ColorBackground;

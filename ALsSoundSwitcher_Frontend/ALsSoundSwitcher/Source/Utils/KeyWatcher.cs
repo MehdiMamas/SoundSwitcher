@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Input;
 using GlobalHotKey;
 
@@ -13,18 +13,26 @@ namespace ALsSoundSwitcher
 
     public static void Run(Action toggleAction)
     {
-      Globals.GlobalHotKeyManager = new HotKeyManager();
-
-      Globals.GlobalHotKeyManager.Register(HkToggle, HkModifier);
-
-      Globals.GlobalHotKeyManager.KeyPressed += HotKeyPressed;
-
-      void HotKeyPressed(object sender, KeyPressedEventArgs e)
+      try
       {
-        if (e.HotKey.Key == HkToggle)
+        Globals.GlobalHotKeyManager = new HotKeyManager();
+
+        Globals.GlobalHotKeyManager.Register(HkToggle, HkModifier);
+
+        Globals.GlobalHotKeyManager.KeyPressed += HotKeyPressed;
+
+        void HotKeyPressed(object sender, KeyPressedEventArgs e)
         {
-          toggleAction.Invoke();
+          if (e.HotKey.Key == HkToggle)
+          {
+            toggleAction.Invoke();
+          }
         }
+      }
+      catch (Exception ex)
+      {
+        // hotkey registration failed (another app may have it) - continue without hotkey
+        Console.WriteLine($"Hotkey registration failed: {ex.Message}");
       }
     }
   }

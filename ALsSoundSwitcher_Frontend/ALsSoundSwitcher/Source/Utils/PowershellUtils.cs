@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Management.Automation;
 using System.Windows.Forms;
@@ -7,12 +7,37 @@ using ALsSoundSwitcher.Properties;
 namespace ALsSoundSwitcher
 {
   public class PowerShellUtils
-  {    
+  {
+    public enum InputDeviceRoleSwitch
+    {
+      Both,
+      DefaultOnly,
+      CommsOnly
+    }
+
     public static void SetInputDeviceCmdlet(string deviceId)
+      => SetInputDeviceCmdlet(deviceId, InputDeviceRoleSwitch.Both);
+
+    public static void SetInputDeviceCmdlet(string deviceId, InputDeviceRoleSwitch roleSwitch)
     {
       using var ps = PowerShell.Create();
       ps.AddCommand("Set-AudioDevice");
       ps.AddParameter("-ID", deviceId);
+
+      switch (roleSwitch)
+      {
+        case InputDeviceRoleSwitch.Both:
+          break;
+        case InputDeviceRoleSwitch.DefaultOnly:
+          ps.AddParameter("-DefaultOnly");
+          break;
+        case InputDeviceRoleSwitch.CommsOnly:
+          ps.AddParameter("-CommunicationOnly");
+          break;
+        default:
+          throw new ArgumentOutOfRangeException(nameof(roleSwitch), roleSwitch, null);
+      }
+
       ps.Invoke();
     }
 

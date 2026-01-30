@@ -44,21 +44,32 @@ namespace ALsSoundSwitcher
 
     public static bool WeAreSwitching = false;
 
+    // when DualDefault is OFF, Lock Device selection alternates between Default and Comms
+    public static bool NextOutputLockIsComms = false;
+    public static bool NextInputLockIsComms = false;
+
     public static MMDeviceEnumerator DeviceEnumerator = new();
 
-    public static Dictionary<string, string> ActiveDevices = new();
+    public static Dictionary<string, string> ActiveOutputDevices = new();
+    public static Dictionary<string, string> ActiveInputDevices = new();
 
     public static CustomRenderer Theme = new();
 
     public static ContextMenuStrip BaseMenu;
 
-    public static ToolStripMenuItem ActiveMenuItemDevice;
+    public static ToolStripMenuItem ActiveMenuItemOutputDevice;
+    public static ToolStripMenuItem ActiveMenuItemInputDevice;
+    
+    public const string OutputPrefix = "[OUT] ";
+    public const string InputPrefix = "[IN] ";
 
     public static ToolStripMenuItem MenuItemMore;
 
     public static ToolStripMenuItem MenuItemCreateTheme;
 
     public static SliderMenuItem MenuItemSlider = new();
+
+    public static Timer VolumeLockTimer;
 
     public static Settings UserSettings = new();
 
@@ -70,6 +81,10 @@ namespace ALsSoundSwitcher
       public static ToolStripMenuItem MenuItemDeviceManager;
       public static ToolStripMenuItem MenuItemLaunchOnStartup;
       public static ToolStripMenuItem MenuItemPreventAutoSwitch;
+      public static ToolStripMenuItem MenuItemLockDevice;
+      public static ToolStripMenuItem MenuItemDualDefault;
+      public static ToolStripMenuItem MenuItemLockVolume;
+      public static ToolStripMenuItem MenuItemLockVolumeDevice;
     }
 
     public struct MouseControlMenuItems
@@ -85,7 +100,6 @@ namespace ALsSoundSwitcher
       public static ToolStripMenuItem MenuItemBrowse;
       public static ToolStripMenuItem MenuItemUpdate;
       public static ToolStripMenuItem MenuItemRefresh;
-      public static ToolStripMenuItem MenuItemMode;
       public static ToolStripMenuItem MenuItemToggleTheme;
       public static ToolStripMenuItem MenuItemMouseControls;
       public static ToolStripMenuItem MenuItemControlPanel;
@@ -98,16 +112,10 @@ namespace ALsSoundSwitcher
       {MouseControlFunction.Expand, Resources.Globals_MouseFunctionDictionary_Expand},
       {MouseControlFunction.Browse, Resources.Globals_MouseFunctionDictionary_Browse},
       {MouseControlFunction.Refresh, Resources.Globals_MouseFunctionDictionary_Refresh},
-      {MouseControlFunction.Toggle_Mode, Resources.Globals_MouseFunctionDictionary_Toggle_Mode},
       {MouseControlFunction.Volume_Mixer, Resources.Globals_MouseFunctionDictionary_Volume_Mixer},
       {MouseControlFunction.Manage_Devices, Resources.Globals_MouseFunctionDictionary_Manage_Devices},
       {MouseControlFunction.Switch_Next_Device, Resources.Globals_MouseFunctionDictionary_Switch_Next_Device}
     };    
     
-    public static Dictionary<DeviceMode, string> DeviceModeDictionary = new()
-    {
-      {DeviceMode.Input, Resources.Globals_DeviceModeDictionary_Input},
-      {DeviceMode.Output, Resources.Globals_DeviceModeDictionary_Output}
-    };
   }
 }

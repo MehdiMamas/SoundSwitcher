@@ -1,4 +1,4 @@
-﻿using System.Windows.Forms;
+using System.Windows.Forms;
 using Microsoft.Win32;
 using System;
 
@@ -6,20 +6,18 @@ namespace ALsSoundSwitcher
 {
   public class RegistryUtils
   {
-    private const string Separator = "_";
-
-    private static string GetName(DeviceMode mode) 
-      => Application.ProductName + Separator + mode;
+    private static string GetName() 
+      => Application.ProductName;
 
     private static RegistryKey GetRegKey() 
       => Registry.CurrentUser.OpenSubKey(Globals.StartupRegistryKey, true);
     
-    public static bool TryDeleteStartupRegistrySetting(DeviceMode mode)
+    public static bool TryDeleteStartupRegistrySetting()
     {
       try
       {
         var rk = GetRegKey();
-        var name = GetName(mode);
+        var name = GetName();
         rk.DeleteValue(name, false);
 
         return true;
@@ -31,12 +29,12 @@ namespace ALsSoundSwitcher
       }
     }
 
-    public static bool TrySaveStartupRegistrySetting(DeviceMode mode)
+    public static bool TrySaveStartupRegistrySetting()
     {
       try
       {
         var rk = GetRegKey();
-        var name = GetName(mode);
+        var name = GetName();
         rk.SetValue(name, Application.ExecutablePath);
 
         return true;
@@ -48,12 +46,12 @@ namespace ALsSoundSwitcher
       }
     }
 
-    public static bool DoesStartupRegistrySettingAlreadyExistForThisPath(DeviceMode mode)
+    public static bool DoesStartupRegistrySettingAlreadyExistForThisPath()
     {
       try
       {
         var rk = GetRegKey();
-        var name = GetName(mode);
+        var name = GetName();
         var regValue = (string)rk.GetValue(name);
         return regValue == Application.ExecutablePath;
       }

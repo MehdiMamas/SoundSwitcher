@@ -18,9 +18,10 @@ namespace ALsSoundSwitcher
     {
       DeviceUtils.GetDeviceList();
       SetupContextMenu();
-      CacheCurrentDevice();
+      CacheCurrentDevices();
       SetCurrentDeviceTrayIcon();
-      SetToolTip(ActiveMenuItemDevice.Text);
+      var tooltip = ActiveMenuItemOutputDevice != null ? ActiveMenuItemOutputDevice.Text : "";
+      SetToolTip(tooltip);
       SetActiveMenuItemMarkers();
     }
 
@@ -52,15 +53,51 @@ namespace ALsSoundSwitcher
 
     private static void AddAudioDevicesAsMenuItems()
     {
-      var sortedDevices = ActiveDevices
+      // add output devices
+      var sortedOutputDevices = ActiveOutputDevices
         .Select(device => new KeyValuePair<string, string>(GetFormattedDeviceName(device.Key), device.Value))
         .OrderBy(pair => pair.Key);
 
-      foreach (var device in sortedDevices)
+      foreach (var device in sortedOutputDevices)
       {
         var menuItem = new ToolStripMenuItem();
-        menuItem.Text = device.Key;
-        menuItem.Click += menuItem_Click;
+        menuItem.Text = OutputPrefix + device.Key;
+        menuItem.Click += menuItemOutput_Click;
+        menuItem.MergeIndex = BaseMenu.Items.Count;
+        menuItem.Tag = device.Value;
+
+        var iconFile = IconUtils.GetBestMatchIconFileName(device.Key);
+        if (iconFile.Length > 0)
+        {
+          try
+          {
+            menuItem.Image = IconUtils.GetPaddedImage(iconFile);
+          }
+          catch (Exception ex)
+          {
+            Console.WriteLine(ex.Message);
+          }
+        }
+
+        BaseMenu.Items.Add(menuItem);
+      }
+
+      // add separator between output and input
+      if (ActiveOutputDevices.Count > 0 && ActiveInputDevices.Count > 0)
+      {
+        BaseMenu.Items.Add("-");
+      }
+
+      // add input devices
+      var sortedInputDevices = ActiveInputDevices
+        .Select(device => new KeyValuePair<string, string>(GetFormattedDeviceName(device.Key), device.Value))
+        .OrderBy(pair => pair.Key);
+
+      foreach (var device in sortedInputDevices)
+      {
+        var menuItem = new ToolStripMenuItem();
+        menuItem.Text = InputPrefix + device.Key;
+        menuItem.Click += menuItemInput_Click;
         menuItem.MergeIndex = BaseMenu.Items.Count;
         menuItem.Tag = device.Value;
 
@@ -97,10 +134,6 @@ namespace ALsSoundSwitcher
       
       MenuItemRefresh = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_Refresh);
       MenuItemRefresh.Click += menuItemRefresh_Click;
-
-      MenuItemMode = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_Mode);
-      MenuItemMode.MouseHover += menuItemExpandable_Hover;
-      SetupDeviceModesSubmenu();
 
       MenuItemToggleTheme = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_SwitchTheme);
       MenuItemToggleTheme.MouseHover += menuItemExpandable_Hover;
@@ -142,16 +175,96 @@ namespace ALsSoundSwitcher
       MenuItemToggleTheme.DropDownItems.Add(MenuItemCreateTheme);
     }
 
-    private static void SetupDeviceModesSubmenu()
+    public static void SetupLockVolumeSubmenu()
     {
-      foreach (var deviceMode in DeviceModeDictionary)
+      MenuItemLockVolume.DropDownItems.Clear();
+      
+      // add "Off" option
+      var offItem = new ToolStripMenuItem("Off");
+      offItem.Tag = -1;
+      offItem.Click += menuItemLockVolumeLevel_Click;
+      MenuItemLockVolume.DropDownItems.Add(offItem);
+      
+      MenuItemLockVolume.DropDownItems.Add("-");
+      
+      // add volume levels 0, 10, 20...100
+      for (int vol = 0; vol <= 100; vol += 10)
       {
-        var mode = new ToolStripMenuItem(deviceMode.Value);
-        mode.Tag = deviceMode.Key;
-        mode.Click += menuItemMode_Click;
-
-        MenuItemMode.DropDownItems.Add(mode);
+        var volItem = new ToolStripMenuItem(vol.ToString());
+        volItem.Tag = vol;
+        volItem.Click += menuItemLockVolumeLevel_Click;
+        MenuItemLockVolume.DropDownItems.Add(volItem);
       }
+    }
+
+    public static void SetupLockVolumeDeviceSubmenu()
+    {
+      MenuItemLockVolumeDevice.DropDownItems.Clear();
+      
+      // add output devices
+      foreach (var device in ActiveOutputDevices)
+      {
+        var deviceItem = new ToolStripMenuItem(OutputPrefix + device.Key);
+        deviceItem.Tag = device.Value;
+        deviceItem.Click += menuItemLockVolumeDevice_Click;
+        MenuItemLockVolumeDevice.DropDownItems.Add(deviceItem);
+      }
+      
+      // add separator
+      if (ActiveOutputDevices.Count > 0 && ActiveInputDevices.Count > 0)
+      {
+        MenuItemLockVolumeDevice.DropDownItems.Add("-");
+      }
+      
+      // add input devices
+      foreach (var device in ActiveInputDevices)
+      {
+        var deviceItem = new ToolStripMenuItem(InputPrefix + device.Key);
+        deviceItem.Tag = device.Value;
+        deviceItem.Click += menuItemLockVolumeDevice_Click;
+        MenuItemLockVolumeDevice.DropDownItems.Add(deviceItem);
+      }
+      
+      // add clear option
+      MenuItemLockVolumeDevice.DropDownItems.Add("-");
+      var clearItem = new ToolStripMenuItem("Clear All");
+      clearItem.Click += menuItemLockVolumeDeviceClear_Click;
+      MenuItemLockVolumeDevice.DropDownItems.Add(clearItem);
+    }
+
+    public static void SetupLockDeviceSubmenu()
+    {
+      MenuItemLockDevice.DropDownItems.Clear();
+      
+      // add output devices
+      foreach (var device in ActiveOutputDevices)
+      {
+        var deviceItem = new ToolStripMenuItem(OutputPrefix + device.Key);
+        deviceItem.Tag = device.Value;
+        deviceItem.Click += menuItemLockDevice_Click;
+        MenuItemLockDevice.DropDownItems.Add(deviceItem);
+      }
+      
+      // add separator
+      if (ActiveOutputDevices.Count > 0 && ActiveInputDevices.Count > 0)
+      {
+        MenuItemLockDevice.DropDownItems.Add("-");
+      }
+      
+      // add input devices
+      foreach (var device in ActiveInputDevices)
+      {
+        var deviceItem = new ToolStripMenuItem(InputPrefix + device.Key);
+        deviceItem.Tag = device.Value;
+        deviceItem.Click += menuItemLockDevice_Click;
+        MenuItemLockDevice.DropDownItems.Add(deviceItem);
+      }
+      
+      // add clear option
+      MenuItemLockDevice.DropDownItems.Add("-");
+      var clearDeviceItem = new ToolStripMenuItem("Clear All");
+      clearDeviceItem.Click += menuItemLockDeviceClear_Click;
+      MenuItemLockDevice.DropDownItems.Add(clearDeviceItem);
     }
 
     private static void SetupMouseControlsSubmenu()
@@ -195,6 +308,21 @@ namespace ALsSoundSwitcher
       MenuItemPreventAutoSwitch = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_PreventAutoSwitch);
       MenuItemPreventAutoSwitch.Click += menuItemPreventAutoSwitch_Click;
 
+      MenuItemLockDevice = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_LockDevice);
+      MenuItemLockDevice.MouseHover += menuItemExpandable_Hover;
+      SetupLockDeviceSubmenu();
+
+      MenuItemDualDefault = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_DualDefault);
+      MenuItemDualDefault.Click += menuItemDualDefault_Click;
+
+      MenuItemLockVolume = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_LockVolume);
+      MenuItemLockVolume.MouseHover += menuItemExpandable_Hover;
+      SetupLockVolumeSubmenu();
+
+      MenuItemLockVolumeDevice = new ToolStripMenuItem(Resources.Form1_SetupContextMenu_LockVolumeDevice);
+      MenuItemLockVolumeDevice.MouseHover += menuItemExpandable_Hover;
+      SetupLockVolumeDeviceSubmenu();
+
       var menuItemFields = typeof(ControlPanelMenuItems).GetFields(BindingFlags.Public | BindingFlags.Static);
       
       foreach (var field in menuItemFields)
@@ -237,6 +365,12 @@ namespace ALsSoundSwitcher
           continue;
         }
 
+        // skip Exit - it will be added to main menu
+        if (item == MenuItemExit)
+        {
+          continue;
+        }
+
         if (item.GetCurrentParent() == null)
         {
           MenuItemMore.DropDownItems.Add(item);
@@ -245,6 +379,10 @@ namespace ALsSoundSwitcher
       }
 
       MenuItemMore.DropDownItems.RemoveAt(MenuItemMore.DropDownItems.Count - 1);
+      
+      // add Exit to main menu
+      BaseMenu.Items.Add("-");
+      BaseMenu.Items.Add(MenuItemExit);
     }
     
     private static void AddVolumeSlider()
@@ -261,8 +399,9 @@ namespace ALsSoundSwitcher
       var deviceName = name.Substring(indexOfOpeningParenthesis + 1, lengthOfFormattedString);
 
       //Handles the case where bracketed portion is identical but prefix is unique, e.g., systems with Realtek(R) audio.
-      var occurrences = ActiveDevices.Keys.Count(key => key.Contains(deviceName));
-      if (occurrences > 1)
+      var occurrencesOutput = ActiveOutputDevices.Keys.Count(key => key.Contains(deviceName));
+      var occurrencesInput = ActiveInputDevices.Keys.Count(key => key.Contains(deviceName));
+      if (occurrencesOutput > 1 || occurrencesInput > 1)
       {
         deviceName = name.Substring(0, indexOfOpeningParenthesis);
       }
@@ -305,19 +444,34 @@ namespace ALsSoundSwitcher
       BaseMenu.ShowImageMargin = items.Any(item => item.Image != null);
     }
 
-    public static void CacheCurrentDevice()
+    public static void CacheCurrentDevices()
     {
-      var currentDevice = DeviceUtils.GetCurrentDefaultDevice();
       var items = BaseMenu.Items.OfType<ToolStripMenuItem>().ToList();
       
       try
       {
-        ActiveMenuItemDevice = items.First(it => (string)it.Tag == currentDevice.DeviceID);
+        var currentOutputDevice = DeviceUtils.GetCurrentDefaultOutputDevice();
+        ActiveMenuItemOutputDevice = items.FirstOrDefault(it => (string)it.Tag == currentOutputDevice.DeviceID);
       }
       catch (Exception e)
       {
         Console.WriteLine(e);
+        ActiveMenuItemOutputDevice = null;
+      }
 
+      try
+      {
+        var currentInputDevice = DeviceUtils.GetCurrentDefaultInputDevice();
+        ActiveMenuItemInputDevice = items.FirstOrDefault(it => (string)it.Tag == currentInputDevice.DeviceID);
+      }
+      catch (Exception e)
+      {
+        Console.WriteLine(e);
+        ActiveMenuItemInputDevice = null;
+      }
+
+      if (ActiveMenuItemOutputDevice == null && ActiveMenuItemInputDevice == null)
+      {
         if (UserSettings.ShowKnownIssueCrashMessages)
         {
           MessageBox.Show(Resources.Form1_CacheCurrentDevice_KnownIssue_Restart, Application.ProductName);
@@ -329,7 +483,8 @@ namespace ALsSoundSwitcher
 
     public static void SetCurrentDeviceTrayIcon()
     {
-      IconUtils.SetTrayIcon(ActiveMenuItemDevice.Text);
+      var deviceText = ActiveMenuItemOutputDevice?.Text ?? ActiveMenuItemInputDevice?.Text ?? "";
+      IconUtils.SetTrayIcon(deviceText);
       notifyIcon1.Visible = true;
     }
 
@@ -351,12 +506,18 @@ namespace ALsSoundSwitcher
       SetBackgroundForBaseMenuItems();
 
       SetBackgroundForMenuItemToggleTheme();
-
-      SetBackgroundForMenuItemModeSelected();
       
       SetBackgroundForMenuItemPreventAutoSwitch();
 
+      SetBackgroundForMenuItemLockDevice();
+
       SetBackgroundForMenuItemLaunchOnStartup();
+
+      SetBackgroundForMenuItemDualDefault();
+
+      SetBackgroundForMenuItemLockVolume();
+
+      SetBackgroundForMenuItemLockVolumeDevice();
 
       SetBackgroundForMouseControlSubmenus();
     }
@@ -367,9 +528,13 @@ namespace ALsSoundSwitcher
       {
         item.ResetBackColor();
       }
-      if (ActiveMenuItemDevice != null)
+      if (ActiveMenuItemOutputDevice != null)
       {
-        ActiveMenuItemDevice.BackColor = Theme.ActiveSelectionColor;
+        ActiveMenuItemOutputDevice.BackColor = Theme.ActiveSelectionColor;
+      }
+      if (ActiveMenuItemInputDevice != null)
+      {
+        ActiveMenuItemInputDevice.BackColor = Theme.ActiveSelectionColor;
       }
     }
 
@@ -384,13 +549,6 @@ namespace ALsSoundSwitcher
           item.BackColor = Theme.ActiveSelectionColor;
         }
       }
-    }
-
-    private static void SetBackgroundForMenuItemModeSelected()
-    {
-      var currentMode = Enum.GetName(typeof(DeviceMode), UserSettings.Mode);     
-      var selectedItem = MenuItemMode.DropDownItems.OfType<ToolStripMenuItem>().First(it => it.Text == currentMode);
-      selectedItem.BackColor = Theme.ActiveSelectionColor;
     }
 
     private static void SetBackgroundForMenuItemPreventAutoSwitch()
@@ -414,6 +572,97 @@ namespace ALsSoundSwitcher
       else
       {
         MenuItemLaunchOnStartup.ResetBackColor();
+      }
+    }
+
+    public static void SetBackgroundForMenuItemDualDefault()
+    {
+      if (UserSettings.DualDefault)
+      {
+        MenuItemDualDefault.BackColor = Theme.ActiveSelectionColor;
+      }
+      else
+      {
+        MenuItemDualDefault.ResetBackColor();
+      }
+    }
+
+    public static void SetBackgroundForMenuItemLockVolume()
+    {
+      var currentLevel = UserSettings.LockVolume ? UserSettings.LockVolumeLevel : -1;
+      
+      foreach (var item in MenuItemLockVolume.DropDownItems.OfType<ToolStripMenuItem>())
+      {
+        item.ResetBackColor();
+        
+        var itemLevel = (int)item.Tag;
+        if (itemLevel == currentLevel || (!UserSettings.LockVolume && itemLevel == -1))
+        {
+          item.BackColor = Theme.ActiveSelectionColor;
+        }
+      }
+    }
+
+    public static void SetBackgroundForMenuItemLockVolumeDevice()
+    {
+      foreach (var item in MenuItemLockVolumeDevice.DropDownItems.OfType<ToolStripMenuItem>())
+      {
+        item.ResetBackColor();
+
+        var deviceId = (string)item.Tag;
+        if (deviceId != null && UserSettings.LockedVolumes.ContainsKey(deviceId))
+        {
+          item.BackColor = Theme.ActiveSelectionColor;
+        }
+      }
+    }
+
+    public static void SetBackgroundForMenuItemLockDevice()
+    {
+      foreach (var item in MenuItemLockDevice.DropDownItems.OfType<ToolStripMenuItem>())
+      {
+        item.ResetBackColor();
+
+        var deviceId = (string)item.Tag;
+        if (deviceId == null) continue;
+
+        if (UserSettings.DualDefault)
+        {
+          // single-color highlight when DualDefault is ON
+          if (deviceId == UserSettings.LockedOutputDefaultDeviceId ||
+              deviceId == UserSettings.LockedOutputCommsDeviceId ||
+              deviceId == UserSettings.LockedInputDefaultDeviceId ||
+              deviceId == UserSettings.LockedInputCommsDeviceId)
+          {
+            item.BackColor = Theme.ActiveSelectionColor;
+          }
+        }
+        else
+        {
+          // DualDefault OFF: Default lock and Comms lock use different colors
+          var isDefaultLock = deviceId == UserSettings.LockedOutputDefaultDeviceId ||
+                              deviceId == UserSettings.LockedInputDefaultDeviceId;
+          var isCommsLock = deviceId == UserSettings.LockedOutputCommsDeviceId ||
+                            deviceId == UserSettings.LockedInputCommsDeviceId;
+
+          var commsColor = !Theme.ColorCheckSquare.IsEmpty
+            ? Theme.ColorCheckSquare
+            : System.Drawing.Color.FromArgb(0, 122, 204);
+
+          // if both roles are set to the same device, show the comms color so the second click is visible
+          if (isDefaultLock && isCommsLock)
+          {
+            item.BackColor = commsColor;
+          }
+          else if (isDefaultLock)
+          {
+            item.BackColor = Theme.ActiveSelectionColor;
+          }
+          else if (isCommsLock)
+          {
+            item.BackColor = commsColor;
+          }
+        }
       }
     }
 

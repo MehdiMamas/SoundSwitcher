@@ -32,7 +32,7 @@ namespace ALsSoundSwitcher
       var icon = GetIconByRawName(Globals.UserSettings.DefaultIcon);
       if (icon == null)
       {
-        icon = Globals.UserSettings.Mode == DeviceMode.Output ? Resources.Headset : Resources.Mic;
+        icon = Resources.Headset;
       }
       return icon;
     }

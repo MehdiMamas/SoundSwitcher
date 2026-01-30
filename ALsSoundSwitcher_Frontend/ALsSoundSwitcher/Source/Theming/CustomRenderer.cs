@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -35,12 +35,12 @@ namespace ALsSoundSwitcher
 
     private void SetColours(ColourPack colourPack)
     {
-      ActiveSelectionColor = colourPack.ActiveSelectionColor;
-      ColorMenuArrow = colourPack.ColorMenuArrow;
-      ColorCheckSquare = colourPack.ColorCheckSquare;
-      ColorCheckMark = colourPack.ColorCheckMark;
-      ColorMenuItemText = colourPack.ColorMenuItemText;
-      ColorBackground = colourPack.ColorBackground;
+      if (!colourPack.ActiveSelectionColor.IsEmpty) ActiveSelectionColor = colourPack.ActiveSelectionColor;
+      if (!colourPack.ColorMenuArrow.IsEmpty) ColorMenuArrow = colourPack.ColorMenuArrow;
+      if (!colourPack.ColorCheckSquare.IsEmpty) ColorCheckSquare = colourPack.ColorCheckSquare;
+      if (!colourPack.ColorCheckMark.IsEmpty) ColorCheckMark = colourPack.ColorCheckMark;
+      if (!colourPack.ColorMenuItemText.IsEmpty) ColorMenuItemText = colourPack.ColorMenuItemText;
+      if (!colourPack.ColorBackground.IsEmpty) ColorBackground = colourPack.ColorBackground;
 
       ColorTable.SetColours(colourPack);
     }

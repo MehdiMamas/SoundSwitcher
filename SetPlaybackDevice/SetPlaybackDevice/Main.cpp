@@ -37,7 +37,36 @@ int main(const int argc, const char * argv[])
   }
 	 else if (wcslen(arg) > 0)
 	 {
-	   SetAudioPlaybackDevice(arg, eConsole);
-	   SetAudioPlaybackDevice(arg, eCommunications);
+	   // check if second argument specifies which role to set
+	   bool setDefault = true;
+	   bool setComms = true;
+	   
+	   if (argc >= 3)
+	   {
+	     wchar_t arg2[256] = { 0 };
+	     MultiByteToWideChar(CP_ACP, 0, argv[2], -1, arg2, 256);
+	     if (!wcscmp(arg2, L"default"))
+	     {
+	       setComms = false;
+	     }
+	     else if (!wcscmp(arg2, L"comms"))
+	     {
+	       setDefault = false;
+	     }
+	   }
+	   
+	   if (setDefault && setComms)
+	   {
+	     // use shared COM initialization for both
+	     SetAudioPlaybackDeviceBoth(arg);
+	   }
+	   else if (setDefault)
+	   {
+	     SetAudioPlaybackDevice(arg, eConsole);
+	   }
+	   else if (setComms)
+	   {
+	     SetAudioPlaybackDevice(arg, eCommunications);
+	   }
   }
 }

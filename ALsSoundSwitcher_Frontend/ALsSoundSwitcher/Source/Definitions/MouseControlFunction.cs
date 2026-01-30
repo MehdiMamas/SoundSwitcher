@@ -1,4 +1,4 @@
-﻿namespace ALsSoundSwitcher
+namespace ALsSoundSwitcher
 {
   public enum MouseControlFunction
   {
@@ -7,7 +7,6 @@
     Expand,
     Browse,
     Refresh,
-    Toggle_Mode,
     Volume_Mixer,
     Manage_Devices,
     Switch_Next_Device
