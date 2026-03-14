@@ -135,6 +135,70 @@ namespace ALsSoundSwitcher
       }
     }
 
+    public static void EnforceLockedDevice()
+    {
+      if (!UserSettings.PreventAutoSwitch)
+      {
+        return;
+      }
+
+      try
+      {
+        // check output default
+        if (!string.IsNullOrEmpty(UserSettings.LockedOutputDefaultDeviceId))
+        {
+          var current = GetCurrentDefaultOutputDevice();
+          if (current.DeviceID != UserSettings.LockedOutputDefaultDeviceId)
+          {
+            var args = UserSettings.DualDefault
+              ? UserSettings.LockedOutputDefaultDeviceId
+              : UserSettings.LockedOutputDefaultDeviceId + " default";
+            ProcessUtils.RunExe(SetDeviceExe, args);
+          }
+          current.Dispose();
+        }
+
+        // check output comms (only relevant when DualDefault is off and a separate comms device is set)
+        if (!UserSettings.DualDefault && !string.IsNullOrEmpty(UserSettings.LockedOutputCommsDeviceId))
+        {
+          var args = UserSettings.LockedOutputCommsDeviceId + " comms";
+          ProcessUtils.RunExe(SetDeviceExe, args);
+        }
+
+        // check input default
+        if (!string.IsNullOrEmpty(UserSettings.LockedInputDefaultDeviceId))
+        {
+          var current = GetCurrentDefaultInputDevice();
+          if (current.DeviceID != UserSettings.LockedInputDefaultDeviceId)
+          {
+            if (UserSettings.DualDefault)
+            {
+              PowerShellUtils.SetInputDeviceCmdlet(UserSettings.LockedInputDefaultDeviceId);
+            }
+            else
+            {
+              PowerShellUtils.SetInputDeviceCmdlet(
+                UserSettings.LockedInputDefaultDeviceId,
+                PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly);
+            }
+          }
+          current.Dispose();
+        }
+
+        // check input comms (only relevant when DualDefault is off)
+        if (!UserSettings.DualDefault && !string.IsNullOrEmpty(UserSettings.LockedInputCommsDeviceId))
+        {
+          PowerShellUtils.SetInputDeviceCmdlet(
+            UserSettings.LockedInputCommsDeviceId,
+            PowerShellUtils.InputDeviceRoleSwitch.CommsOnly);
+        }
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine(@"device lock timer: " + ex.Message);
+      }
+    }
+
     public static void EnforceLockedVolumes()
     {
       if (!UserSettings.LockVolume || UserSettings.LockedVolumes == null || UserSettings.LockedVolumes.Count == 0)

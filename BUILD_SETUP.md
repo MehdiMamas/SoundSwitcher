@@ -1,18 +1,50 @@
 # Build Setup Guide - SoundSwitcher
 
-This document provides step-by-step instructions to build SoundSwitcher on a fresh Windows machine.
+## Quick Build (from repo root)
 
-## Prerequisites Installation
+All commands below work in **Git Bash**. Run from the repository root.
 
-### 1. Install .NET Framework 4.8.1 Developer Pack
+```bash
+MSBUILD="/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe"
+
+# 1. restore nuget packages
+./nuget.exe restore ALsSoundSwitcher_Frontend/ALsSoundSwitcher.sln -Source https://api.nuget.org/v3/index.json
+
+# 2. build frontend (WinForms, .NET Framework 4.8.1)
+"$MSBUILD" ALsSoundSwitcher_Frontend/ALsSoundSwitcher.sln -p:Configuration=Release -p:Platform="Any CPU"
+
+# 3. build backend (C++, x64)
+"$MSBUILD" SetPlaybackDevice/SetPlaybackDevice.sln -p:Configuration=Release -p:Platform=x64
+```
+
+Or as a single copy-paste block:
+
+```bash
+./nuget.exe restore ALsSoundSwitcher_Frontend/ALsSoundSwitcher.sln -Source https://api.nuget.org/v3/index.json && "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" ALsSoundSwitcher_Frontend/ALsSoundSwitcher.sln -p:Configuration=Release -p:Platform="Any CPU" && "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" SetPlaybackDevice/SetPlaybackDevice.sln -p:Configuration=Release -p:Platform=x64
+```
+
+## Build Output
+
+- **Frontend:** `ALsSoundSwitcher_Frontend/ALsSoundSwitcher/bin/Release/ALsSoundSwitcher.exe`
+- **Backend:** `SetPlaybackDevice/x64/Release/SetPlaybackDevice.exe`
+
+Open the release folder:
+
+```bash
+explorer "ALsSoundSwitcher_Frontend/ALsSoundSwitcher/bin/Release"
+```
+
+---
+
+## Prerequisites (first-time setup)
+
+### 1. .NET Framework 4.8.1 Developer Pack
 
 ```powershell
 winget install Microsoft.DotNet.Framework.DeveloperPack_4
 ```
 
-This installs the 4.8.1 targeting pack. The project was retargeted from 4.5.2 to 4.8.1 to match available tooling.
-
-### 2. Install Visual Studio 2022 Build Tools
+### 2. Visual Studio 2022 Build Tools
 
 ```powershell
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.VisualStudio.Workload.VCTools --quiet --wait"
@@ -20,124 +52,44 @@ winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsof
 
 This provides:
 - MSBuild for .NET Framework WinForms projects
-- VC++ toolchain (cl.exe under `BuildTools\VC\Tools\MSVC\...`) for the C++ backend
+- VC++ toolchain (v143) for the C++ backend
 
-### 3. Download NuGet CLI
+### 3. NuGet CLI
 
 ```powershell
 Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "nuget.exe"
 ```
 
-Required because the project uses packages.config format (not PackageReference).
-
-### 4. (Optional) Install .NET SDK 8
-
-```powershell
-winget install Microsoft.DotNet.SDK.8
-```
-
-This was installed but not used for the final build. The project uses MSBuild from VS Build Tools, not `dotnet build`.
+Required because the project uses `packages.config` format (not PackageReference).
 
 ---
 
-## Repository Changes Required
+## Repository Changes (already applied)
 
-These changes were already applied to make the project build.
+### Retarget to .NET Framework 4.8.1
 
-### 1. Retarget WinForms Project to .NET Framework 4.8.1
+`ALsSoundSwitcher_Frontend/ALsSoundSwitcher/ALsSoundSwitcher.csproj`: changed `TargetFrameworkVersion` from `v4.5.2` to `v4.8.1`.
 
-**File:** `ALsSoundSwitcher_Frontend/ALsSoundSwitcher/ALsSoundSwitcher.csproj`
+### Fix DotNetZip reference
 
-```xml
-<!-- changed from -->
-<TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+Same `.csproj`: changed `Ionic.Zip` reference to `DotNetZip.1.11.0/lib/net20/DotNetZip.dll` to match the restored NuGet package.
 
-<!-- to -->
-<TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
-```
+### Fix C++ CRT warnings
 
-### 2. Fix DotNetZip Reference
-
-**File:** `ALsSoundSwitcher_Frontend/ALsSoundSwitcher/ALsSoundSwitcher.csproj`
-
-The old reference pointed to `Ionic.Zip/Ionic.Zip.dll` but the restored NuGet package provides `DotNetZip.dll`:
-
-```xml
-<!-- changed from -->
-<Reference Include="Ionic.Zip">
-  <HintPath>..\packages\Ionic.Zip\Ionic.Zip.dll</HintPath>
-</Reference>
-
-<!-- to -->
-<Reference Include="DotNetZip">
-  <HintPath>..\packages\DotNetZip.1.11.0\lib\net20\DotNetZip.dll</HintPath>
-</Reference>
-```
-
-### 3. Fix C++ Unsafe CRT Warnings
-
-**File:** `SetPlaybackDevice/SetPlaybackDevice/SetPlaybackDevice.vcxproj`
-
-Added `_CRT_SECURE_NO_WARNINGS` to preprocessor definitions:
-
-```xml
-<PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-```
-
----
-
-## Build Steps
-
-### 1. Restore NuGet Packages
-
-From the repository root:
-
-```powershell
-.\nuget.exe restore ALsSoundSwitcher_Frontend\ALsSoundSwitcher.sln -Source https://api.nuget.org/v3/index.json
-```
-
-### 2. Build WinForms Frontend
-
-```powershell
-& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" `
-  ALsSoundSwitcher_Frontend\ALsSoundSwitcher.sln `
-  /p:Configuration=Release `
-  /p:Platform="Any CPU"
-```
-
-### 3. Build C++ Backend (SetPlaybackDevice)
-
-```powershell
-& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" `
-  SetPlaybackDevice\SetPlaybackDevice.sln `
-  /p:Configuration=Release `
-  /p:Platform=x64
-```
-
----
-
-## Build Output Locations
-
-- **Frontend:** `ALsSoundSwitcher_Frontend\ALsSoundSwitcher\bin\Release\ALsSoundSwitcher.exe`
-- **Backend:** `SetPlaybackDevice\SetPlaybackDevice\x64\Release\SetPlaybackDevice.exe`
+`SetPlaybackDevice/SetPlaybackDevice/SetPlaybackDevice.vcxproj`: added `_CRT_SECURE_NO_WARNINGS` to preprocessor definitions.
 
 ---
 
 ## Key Points
 
-1. **Use MSBuild, not `dotnet build`**: This is a .NET Framework project, not .NET Core/5+. MSBuild from Visual Studio Build Tools is required.
-
-2. **Target Framework**: The project targets .NET Framework 4.8.1 (retargeted from 4.5.2).
-
-3. **NuGet Restore**: Use `nuget.exe` for packages.config-based projects.
-
-4. **C++ Toolchain**: Requires VC++ tools from Visual Studio Build Tools (v143 toolset).
-
----
+- **Use MSBuild, not `dotnet build`** -- this is a .NET Framework project, not .NET Core/5+.
+- **Target Framework:** .NET Framework 4.8.1 (retargeted from 4.5.2).
+- **NuGet:** use `nuget.exe` CLI for `packages.config`-based restore.
+- **C++ Toolchain:** requires VC++ v143 toolset from VS 2022 Build Tools.
 
 ## Troubleshooting
 
-- **"Target framework not found"**: Ensure .NET Framework 4.8.1 Developer Pack is installed.
-- **"MSBuild not found"**: Verify Visual Studio 2022 Build Tools with Managed Desktop Build Tools workload is installed.
-- **"NuGet packages missing"**: Run `nuget.exe restore` before building.
-- **C++ build errors**: Ensure VC++ tools (VCTools workload) are installed via Build Tools installer.
+- **"Target framework not found"**: install .NET Framework 4.8.1 Developer Pack.
+- **"MSBuild not found"**: install VS 2022 Build Tools with ManagedDesktopBuildTools + VCTools workloads.
+- **"NuGet packages missing"**: run `nuget.exe restore` before building.
+- **C++ build errors**: ensure VCTools workload is installed.

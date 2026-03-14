@@ -14,6 +14,8 @@ namespace ALsSoundSwitcher
     {
       try
       {
+        EnsureConfigFileExists();
+
         ProcessJsonSettings();
 
         return true;
@@ -26,6 +28,19 @@ namespace ALsSoundSwitcher
 
         return false;
       }
+    }
+
+    private static void EnsureConfigFileExists()
+    {
+      if (File.Exists(ConfigFile))
+      {
+        return;
+      }
+
+      // no config file yet — write out defaults so the rest of startup has something to read
+      UserSettings = new Settings();
+      UserSettings.LockedVolumes = new Dictionary<string, int>();
+      Save();
     }
 
     private static void ProcessJsonSettings()
@@ -64,26 +79,40 @@ namespace ALsSoundSwitcher
 
     public static void TryUpdateFileStructure()
     {
-      var jsonString = File.ReadAllText(ConfigFile);
-      var keysInFile = JObject.Parse(jsonString).Properties().Select(p => p.Name).Count();
-
-      var keysInStruct = typeof(Settings).GetProperties().Length;
-
-      if (keysInFile != keysInStruct)
+      try
       {
-        Save();
+        var jsonString = File.ReadAllText(ConfigFile);
+        var keysInFile = JObject.Parse(jsonString).Properties().Select(p => p.Name).Count();
+
+        var keysInStruct = typeof(Settings).GetProperties().Length;
+
+        if (keysInFile != keysInStruct)
+        {
+          Save();
+        }
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine(@"failed to update config file structure: " + ex.Message);
       }
     }
 
     public static void Save()
     {
-      var jsonString = JsonConvert.SerializeObject(UserSettings, Formatting.Indented);
+      try
+      {
+        var jsonString = JsonConvert.SerializeObject(UserSettings, Formatting.Indented);
 
-      using var sw = File.CreateText(ConfigFile);
-      sw.Write(jsonString);
+        using var sw = File.CreateText(ConfigFile);
+        sw.Write(jsonString);
 
-      //Prevent triggering of file watcher as this is an internally driven update
-      SettingsHash = jsonString.GetHashCode(); 
+        // prevent triggering of file watcher as this is an internally driven update
+        SettingsHash = jsonString.GetHashCode();
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine(@"failed to save config: " + ex.Message);
+      }
     }
   }
 }

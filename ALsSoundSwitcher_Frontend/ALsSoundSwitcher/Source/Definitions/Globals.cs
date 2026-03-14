@@ -70,6 +70,7 @@ namespace ALsSoundSwitcher
     public static SliderMenuItem MenuItemSlider = new();
 
     public static Timer VolumeLockTimer;
+    public static Timer DeviceLockTimer;
 
     public static Settings UserSettings = new();
 

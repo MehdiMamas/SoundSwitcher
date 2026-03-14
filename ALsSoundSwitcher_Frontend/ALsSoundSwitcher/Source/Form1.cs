@@ -45,6 +45,14 @@ namespace ALsSoundSwitcher
         Globals.VolumeLockTimer.Start();
       }
 
+      if (Globals.DeviceLockTimer == null)
+      {
+        Globals.DeviceLockTimer = new Timer();
+        Globals.DeviceLockTimer.Interval = 60000;
+        Globals.DeviceLockTimer.Tick += (_, _) => DeviceUtils.EnforceLockedDevice();
+        Globals.DeviceLockTimer.Start();
+      }
+
       Minimize();
 
       DeviceUtils.Monitor();
