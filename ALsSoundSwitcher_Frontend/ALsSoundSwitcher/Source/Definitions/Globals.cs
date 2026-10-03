@@ -1,5 +1,6 @@
 using ALsSoundSwitcher.Properties;
 using CSCore.CoreAudioAPI;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using GlobalHotKey;
@@ -44,9 +45,19 @@ namespace ALsSoundSwitcher
 
     public static bool WeAreSwitching = false;
 
-    // when DualDefault is OFF, Lock Device selection alternates between Default and Comms
-    public static bool NextOutputLockIsComms = false;
-    public static bool NextInputLockIsComms = false;
+    // ignore default-device callbacks caused by a switch this process just made
+    public static DateTime IgnoreDeviceChangeUntil = DateTime.MinValue;
+
+    public static void BeginOwnedDeviceChange()
+    {
+      WeAreSwitching = true;
+      IgnoreDeviceChangeUntil = DateTime.UtcNow.AddMilliseconds(1000);
+    }
+
+    public static bool ShouldIgnoreDeviceChange()
+    {
+      return DateTime.UtcNow < IgnoreDeviceChangeUntil;
+    }
 
     public static MMDeviceEnumerator DeviceEnumerator = new();
 

@@ -18,37 +18,68 @@ namespace ALsSoundSwitcher
     public static void SetInputDeviceCmdlet(string deviceId)
       => SetInputDeviceCmdlet(deviceId, InputDeviceRoleSwitch.Both);
 
+    private static bool? _audioCmdletsAvailable;
+
     public static void SetInputDeviceCmdlet(string deviceId, InputDeviceRoleSwitch roleSwitch)
     {
       using var ps = PowerShell.Create();
       ps.AddCommand("Set-AudioDevice");
-      ps.AddParameter("-ID", deviceId);
+      ps.AddParameter("ID", deviceId);
 
       switch (roleSwitch)
       {
         case InputDeviceRoleSwitch.Both:
           break;
         case InputDeviceRoleSwitch.DefaultOnly:
-          ps.AddParameter("-DefaultOnly");
+          ps.AddParameter("DefaultOnly");
           break;
         case InputDeviceRoleSwitch.CommsOnly:
-          ps.AddParameter("-CommunicationOnly");
+          ps.AddParameter("CommunicationOnly");
           break;
         default:
           throw new ArgumentOutOfRangeException(nameof(roleSwitch), roleSwitch, null);
       }
 
       ps.Invoke();
+      if (ps.HadErrors)
+      {
+        var message = ps.Streams.Error.Count > 0
+          ? ps.Streams.Error[0].ToString()
+          : "Set-AudioDevice failed.";
+        throw new InvalidOperationException(message);
+      }
+    }
+
+    public static bool AudioCmdletsAreInstalled()
+    {
+      if (_audioCmdletsAvailable == true)
+      {
+        return true;
+      }
+
+      if (AudioCmdletsNeedsInstallation())
+      {
+        return false;
+      }
+
+      _audioCmdletsAvailable = true;
+      return true;
     }
 
     public static bool VerifyAudioCmdletsAvailability()
     {
-      if (AudioCmdletsNeedsInstallation())
+      if (AudioCmdletsAreInstalled())
       {
-        return InstallAudioCmdlets();
+        return true;
       }
 
-      return true;
+      if (InstallAudioCmdlets())
+      {
+        _audioCmdletsAvailable = true;
+        return true;
+      }
+
+      return false;
     }
 
     private static bool AudioCmdletsNeedsInstallation()

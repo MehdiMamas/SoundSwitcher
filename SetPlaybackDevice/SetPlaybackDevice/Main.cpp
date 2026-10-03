@@ -63,10 +63,13 @@ int main(const int argc, const char * argv[])
 	   else if (setDefault)
 	   {
 	     SetAudioPlaybackDevice(arg, eConsole);
+	     SetAudioPlaybackDevice(arg, eMultimedia);
 	   }
 	   else if (setComms)
 	   {
 	     SetAudioPlaybackDevice(arg, eCommunications);
 	   }
   }
+
+  return 0;
 }

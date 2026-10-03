@@ -181,129 +181,195 @@ namespace ALsSoundSwitcher
     private static void menuItemPreventAutoSwitch_Click(object sender, EventArgs e)
     {
       UserSettings.PreventAutoSwitch = !UserSettings.PreventAutoSwitch;
+      if (UserSettings.PreventAutoSwitch)
+      {
+        DeviceUtils.CaptureCurrentDevicesAsLocks();
+      }
 
       Config.Save();
 
       SetBackgroundForMenuItemPreventAutoSwitch();
+      SetBackgroundForMenuItemLockDevice();
 
       RestoreMenus((ToolStripItem)sender);
     }
 
     private static void menuItemLockDevice_Click(object sender, EventArgs e)
     {
-      var selectedDeviceId = (string)((ToolStripMenuItem)sender).Tag;
-      var isOutput = ((ToolStripMenuItem)sender).Text.StartsWith(OutputPrefix);
-      
+      var menuItem = (ToolStripMenuItem)sender;
+      var selectedDeviceId = (string)menuItem.Tag;
+      var isOutput = menuItem.Text.StartsWith(OutputPrefix);
+
       if (isOutput)
       {
-        if (UserSettings.DualDefault)
+        var alreadyLocked = UserSettings.LockedOutputDefaultDeviceId == selectedDeviceId &&
+                            UserSettings.LockedOutputCommsDeviceId == selectedDeviceId;
+        if (alreadyLocked)
         {
-          // toggle output device lock (both default + comms)
-          if (UserSettings.LockedOutputDefaultDeviceId == selectedDeviceId &&
-              UserSettings.LockedOutputCommsDeviceId == selectedDeviceId)
-          {
-            UserSettings.LockedOutputDefaultDeviceId = "";
-            UserSettings.LockedOutputCommsDeviceId = "";
-          }
-          else
-          {
-            UserSettings.LockedOutputDefaultDeviceId = selectedDeviceId;
-            UserSettings.LockedOutputCommsDeviceId = selectedDeviceId;
-
-            // also switch to the locked device now (both roles)
-            ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId);
-          }
+          UserSettings.LockedOutputDefaultDeviceId = "";
+          UserSettings.LockedOutputCommsDeviceId = "";
         }
         else
         {
-          // DualDefault OFF: alternate between setting Default and Comms
-          var setComms = NextOutputLockIsComms;
-          if (setComms)
-          {
-            if (UserSettings.LockedOutputCommsDeviceId == selectedDeviceId)
-            {
-              UserSettings.LockedOutputCommsDeviceId = "";
-            }
-            else
-            {
-              UserSettings.LockedOutputCommsDeviceId = selectedDeviceId;
-              ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId + " comms");
-              NextOutputLockIsComms = false;
-            }
-          }
-          else
-          {
-            if (UserSettings.LockedOutputDefaultDeviceId == selectedDeviceId)
-            {
-              UserSettings.LockedOutputDefaultDeviceId = "";
-            }
-            else
-            {
-              UserSettings.LockedOutputDefaultDeviceId = selectedDeviceId;
-              ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId + " default");
-              NextOutputLockIsComms = true;
-            }
-          }
+          UserSettings.PreventAutoSwitch = true;
+          UserSettings.LockedOutputDefaultDeviceId = selectedDeviceId;
+          UserSettings.LockedOutputCommsDeviceId = selectedDeviceId;
+          BeginOwnedDeviceChange();
+          ProcessUtils.RunExe(SetDeviceExe, selectedDeviceId);
         }
       }
       else
       {
-        if (UserSettings.DualDefault)
+        var alreadyLocked = UserSettings.LockedInputDefaultDeviceId == selectedDeviceId &&
+                            UserSettings.LockedInputCommsDeviceId == selectedDeviceId;
+        if (alreadyLocked)
         {
-          // toggle input device lock (both default + comms)
-          if (UserSettings.LockedInputDefaultDeviceId == selectedDeviceId &&
-              UserSettings.LockedInputCommsDeviceId == selectedDeviceId)
-          {
-            UserSettings.LockedInputDefaultDeviceId = "";
-            UserSettings.LockedInputCommsDeviceId = "";
-          }
-          else
-          {
-            UserSettings.LockedInputDefaultDeviceId = selectedDeviceId;
-            UserSettings.LockedInputCommsDeviceId = selectedDeviceId;
-
-            // also switch to the locked device now (both roles)
-            PowerShellUtils.SetInputDeviceCmdlet(selectedDeviceId);
-          }
+          UserSettings.LockedInputDefaultDeviceId = "";
+          UserSettings.LockedInputCommsDeviceId = "";
         }
-        else
+        else if (PowerShellUtils.VerifyAudioCmdletsAvailability() &&
+                 TryApplyInputDevice(selectedDeviceId, PowerShellUtils.InputDeviceRoleSwitch.Both))
         {
-          // DualDefault OFF: alternate between setting Default and Comms
-          var setComms = NextInputLockIsComms;
-          if (setComms)
-          {
-            if (UserSettings.LockedInputCommsDeviceId == selectedDeviceId)
-            {
-              UserSettings.LockedInputCommsDeviceId = "";
-            }
-            else
-            {
-              UserSettings.LockedInputCommsDeviceId = selectedDeviceId;
-              PowerShellUtils.SetInputDeviceCmdlet(selectedDeviceId, PowerShellUtils.InputDeviceRoleSwitch.CommsOnly);
-              NextInputLockIsComms = false;
-            }
-          }
-          else
-          {
-            if (UserSettings.LockedInputDefaultDeviceId == selectedDeviceId)
-            {
-              UserSettings.LockedInputDefaultDeviceId = "";
-            }
-            else
-            {
-              UserSettings.LockedInputDefaultDeviceId = selectedDeviceId;
-              PowerShellUtils.SetInputDeviceCmdlet(selectedDeviceId, PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly);
-              NextInputLockIsComms = true;
-            }
-          }
+          UserSettings.PreventAutoSwitch = true;
+          UserSettings.LockedInputDefaultDeviceId = selectedDeviceId;
+          UserSettings.LockedInputCommsDeviceId = selectedDeviceId;
         }
       }
 
       Config.Save();
 
+      SetBackgroundForMenuItemPreventAutoSwitch();
       SetBackgroundForMenuItemLockDevice();
 
       RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static void menuItemLockDeviceRole_Click(object sender, EventArgs e)
+    {
+      var selection = (DeviceLockSelection)((ToolStripMenuItem)sender).Tag;
+      if (IsRoleLocked(selection))
+      {
+        ClearRoleLock(selection);
+      }
+      else if (selection.IsOutput)
+      {
+        UserSettings.PreventAutoSwitch = true;
+        SetRoleLock(selection);
+        BeginOwnedDeviceChange();
+        var args = selection.DeviceId + (selection.IsComms ? " comms" : " default");
+        ProcessUtils.RunExe(SetDeviceExe, args);
+      }
+      else if (PowerShellUtils.VerifyAudioCmdletsAvailability() &&
+               TryApplyInputDevice(
+                 selection.DeviceId,
+                 selection.IsComms
+                   ? PowerShellUtils.InputDeviceRoleSwitch.CommsOnly
+                   : PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly))
+      {
+        UserSettings.PreventAutoSwitch = true;
+        SetRoleLock(selection);
+      }
+
+      Config.Save();
+
+      SetBackgroundForMenuItemPreventAutoSwitch();
+      SetBackgroundForMenuItemLockDevice();
+
+      RestoreMenus((ToolStripItem)sender);
+    }
+
+    private static bool TryApplyInputDevice(string deviceId, PowerShellUtils.InputDeviceRoleSwitch role)
+    {
+      try
+      {
+        BeginOwnedDeviceChange();
+        PowerShellUtils.SetInputDeviceCmdlet(deviceId, role);
+        return true;
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine(ex);
+        NotifyUserOfSwitchResult(null, false);
+        return false;
+      }
+    }
+
+    private static bool IsRoleLocked(DeviceLockSelection selection)
+    {
+      if (selection.IsOutput)
+      {
+        return selection.IsComms
+          ? UserSettings.LockedOutputCommsDeviceId == selection.DeviceId
+          : UserSettings.LockedOutputDefaultDeviceId == selection.DeviceId;
+      }
+
+      return selection.IsComms
+        ? UserSettings.LockedInputCommsDeviceId == selection.DeviceId
+        : UserSettings.LockedInputDefaultDeviceId == selection.DeviceId;
+    }
+
+    private static void SetRoleLock(DeviceLockSelection selection)
+    {
+      if (selection.IsOutput)
+      {
+        if (selection.IsComms)
+        {
+          UserSettings.LockedOutputCommsDeviceId = selection.DeviceId;
+        }
+        else
+        {
+          UserSettings.LockedOutputDefaultDeviceId = selection.DeviceId;
+        }
+        return;
+      }
+
+      if (selection.IsComms)
+      {
+        UserSettings.LockedInputCommsDeviceId = selection.DeviceId;
+      }
+      else
+      {
+        UserSettings.LockedInputDefaultDeviceId = selection.DeviceId;
+      }
+    }
+
+    private static void ClearRoleLock(DeviceLockSelection selection)
+    {
+      if (selection.IsOutput)
+      {
+        if (selection.IsComms && UserSettings.LockedOutputCommsDeviceId == selection.DeviceId)
+        {
+          UserSettings.LockedOutputCommsDeviceId = "";
+        }
+        else if (!selection.IsComms && UserSettings.LockedOutputDefaultDeviceId == selection.DeviceId)
+        {
+          UserSettings.LockedOutputDefaultDeviceId = "";
+        }
+        return;
+      }
+
+      if (selection.IsComms && UserSettings.LockedInputCommsDeviceId == selection.DeviceId)
+      {
+        UserSettings.LockedInputCommsDeviceId = "";
+      }
+      else if (!selection.IsComms && UserSettings.LockedInputDefaultDeviceId == selection.DeviceId)
+      {
+        UserSettings.LockedInputDefaultDeviceId = "";
+      }
+    }
+
+    private sealed class DeviceLockSelection
+    {
+      public DeviceLockSelection(string deviceId, bool isOutput, bool isComms)
+      {
+        DeviceId = deviceId;
+        IsOutput = isOutput;
+        IsComms = isComms;
+      }
+
+      public string DeviceId { get; }
+      public bool IsOutput { get; }
+      public bool IsComms { get; }
     }
 
     private static void menuItemLockDeviceClear_Click(object sender, EventArgs e)
@@ -317,9 +383,6 @@ namespace ALsSoundSwitcher
       UserSettings.LockedOutputDeviceId = "";
       UserSettings.LockedInputDeviceId = "";
 
-      NextOutputLockIsComms = false;
-      NextInputLockIsComms = false;
-
       Config.Save();
 
       SetBackgroundForMenuItemLockDevice();
@@ -331,9 +394,12 @@ namespace ALsSoundSwitcher
     {
       UserSettings.DualDefault = !UserSettings.DualDefault;
 
+      SetupLockDeviceSubmenu();
+
       Config.Save();
 
       SetBackgroundForMenuItemDualDefault();
+      SetBackgroundForMenuItemLockDevice();
 
       RestoreMenus((ToolStripItem)sender);
     }
@@ -384,9 +450,8 @@ namespace ALsSoundSwitcher
           UserSettings.LockedVolumes[selectedDeviceId] = UserSettings.LockVolumeLevel;
           DeviceUtils.SetDeviceLevel(selectedDeviceId, UserSettings.LockVolumeLevel);
         }
-        else
+        else if (DeviceUtils.TryGetDeviceLevel(selectedDeviceId, out var currentVolume))
         {
-          var currentVolume = DeviceUtils.GetDeviceLevel(selectedDeviceId);
           UserSettings.LockedVolumes[selectedDeviceId] = currentVolume;
         }
       }

@@ -12,10 +12,9 @@ namespace ALsSoundSwitcher
     {
       try
       {
-        WeAreSwitching = true;
-
         var deviceId = (string) menuItem.Tag;
         var args = UserSettings.DualDefault ? deviceId : deviceId + " default";
+        BeginOwnedDeviceChange();
         ProcessUtils.RunExe(SetDeviceExe, args);
 
         ActiveMenuItemOutputDevice = menuItem;
@@ -46,10 +45,18 @@ namespace ALsSoundSwitcher
     {
       try
       {
-        WeAreSwitching = true;
-
         var deviceId = (string) menuItem.Tag;
-        PowerShellUtils.SetInputDeviceCmdlet(deviceId);
+        if (!PowerShellUtils.VerifyAudioCmdletsAvailability())
+        {
+          NotifyUserOfSwitchResult(null, false);
+          return;
+        }
+
+        var role = UserSettings.DualDefault
+          ? PowerShellUtils.InputDeviceRoleSwitch.Both
+          : PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly;
+        BeginOwnedDeviceChange();
+        PowerShellUtils.SetInputDeviceCmdlet(deviceId, role);
 
         ActiveMenuItemInputDevice = menuItem;
 
@@ -112,6 +119,46 @@ namespace ALsSoundSwitcher
           ToolTipIcon.Error
         );
       }
+    }
+
+    private static void SyncActiveDeviceMenu(bool isOutput, string deviceId)
+    {
+      if (BaseMenu == null || string.IsNullOrEmpty(deviceId))
+      {
+        return;
+      }
+
+      var prefix = isOutput ? OutputPrefix : InputPrefix;
+      var match = BaseMenu.Items.OfType<ToolStripMenuItem>()
+        .FirstOrDefault(it => it.Text.StartsWith(prefix) && (string)it.Tag == deviceId);
+
+      if (match == null)
+      {
+        return;
+      }
+
+      if (isOutput)
+      {
+        if (ActiveMenuItemOutputDevice == match)
+        {
+          return;
+        }
+
+        ActiveMenuItemOutputDevice = match;
+        IconUtils.SetTrayIcon(match.Text);
+        SetToolTip(match.Text);
+        MenuItemSlider.RefreshValue();
+      }
+      else if (ActiveMenuItemInputDevice == match)
+      {
+        return;
+      }
+      else
+      {
+        ActiveMenuItemInputDevice = match;
+      }
+
+      SetActiveMenuItemMarkers();
     }
   }
 }

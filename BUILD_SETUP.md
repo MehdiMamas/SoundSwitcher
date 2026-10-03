@@ -60,7 +60,7 @@ This provides:
 Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "nuget.exe"
 ```
 
-Required because the project uses `packages.config` format (not PackageReference).
+Required because the project uses `packages.config` format (not PackageReference). `nuget.exe` is gitignored and is not part of the repository.
 
 ---
 

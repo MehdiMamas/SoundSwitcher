@@ -26,28 +26,58 @@ namespace ALsSoundSwitcher
       return DeviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
     }
 
+    public static bool TryGetDefaultEndpoint(DataFlow flow, Role role, out MMDevice device)
+    {
+      device = null;
+      try
+      {
+        device = DeviceEnumerator.GetDefaultAudioEndpoint(flow, role);
+        return device != null;
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
     public static void GetDeviceList()
     {
       ActiveOutputDevices.Clear();
       ActiveInputDevices.Clear();
 
-      // get output devices
-      var outputCollection = DeviceEnumerator.EnumAudioEndpoints(DataFlow.Render, DeviceState.Active);
-      var outputInfoList = outputCollection.Select(device => Tuple.Create(device.FriendlyName, device.DeviceID)).ToList();
+      var outputInfoList = ReadActiveEndpoints(DataFlow.Render);
       UpdateDuplicates(outputInfoList);
       foreach (var device in outputInfoList)
       {
         ActiveOutputDevices.Add(device.Item1, device.Item2);
       }
 
-      // get input devices
-      var inputCollection = DeviceEnumerator.EnumAudioEndpoints(DataFlow.Capture, DeviceState.Active);
-      var inputInfoList = inputCollection.Select(device => Tuple.Create(device.FriendlyName, device.DeviceID)).ToList();
+      var inputInfoList = ReadActiveEndpoints(DataFlow.Capture);
       UpdateDuplicates(inputInfoList);
       foreach (var device in inputInfoList)
       {
         ActiveInputDevices.Add(device.Item1, device.Item2);
       }
+    }
+
+    private static List<Tuple<string, string>> ReadActiveEndpoints(DataFlow flow)
+    {
+      var deviceInfoList = new List<Tuple<string, string>>();
+      var deviceCollection = DeviceEnumerator.EnumAudioEndpoints(flow, DeviceState.Active);
+      try
+      {
+        foreach (var device in deviceCollection)
+        {
+          deviceInfoList.Add(Tuple.Create(device.FriendlyName, device.DeviceID));
+          device.Dispose();
+        }
+      }
+      finally
+      {
+        deviceCollection.Dispose();
+      }
+
+      return deviceInfoList;
     }
 
     private static void UpdateDuplicates(List<Tuple<string, string>> deviceInfoList)
@@ -98,21 +128,27 @@ namespace ALsSoundSwitcher
 
     public static int GetDeviceLevel(string deviceId)
     {
+      return TryGetDeviceLevel(deviceId, out var level) ? level : 0;
+    }
+
+    public static bool TryGetDeviceLevel(string deviceId, out int level)
+    {
+      level = 0;
       try
       {
         var device = DeviceEnumerator.GetDevice(deviceId);
         var volume = AudioEndpointVolume.FromDevice(device);
 
-        var level = (int)Math.Round(volume.MasterVolumeLevelScalar * 100);
+        level = (int)Math.Round(volume.MasterVolumeLevelScalar * 100);
 
         volume.Dispose();
         device.Dispose();
 
-        return level;
+        return true;
       }
       catch
       {
-        return 0;
+        return false;
       }
     }
 
@@ -135,6 +171,47 @@ namespace ALsSoundSwitcher
       }
     }
 
+    public static void CaptureCurrentDevicesAsLocks()
+    {
+      if (string.IsNullOrEmpty(UserSettings.LockedOutputDefaultDeviceId) &&
+          TryGetDefaultEndpoint(DataFlow.Render, Role.Multimedia, out var output))
+      {
+        UserSettings.LockedOutputDefaultDeviceId = output.DeviceID;
+        if (UserSettings.DualDefault)
+        {
+          UserSettings.LockedOutputCommsDeviceId = output.DeviceID;
+        }
+        output.Dispose();
+      }
+
+      if (!UserSettings.DualDefault &&
+          string.IsNullOrEmpty(UserSettings.LockedOutputCommsDeviceId) &&
+          TryGetDefaultEndpoint(DataFlow.Render, Role.Communications, out var outputComms))
+      {
+        UserSettings.LockedOutputCommsDeviceId = outputComms.DeviceID;
+        outputComms.Dispose();
+      }
+
+      if (string.IsNullOrEmpty(UserSettings.LockedInputDefaultDeviceId) &&
+          TryGetDefaultEndpoint(DataFlow.Capture, Role.Multimedia, out var input))
+      {
+        UserSettings.LockedInputDefaultDeviceId = input.DeviceID;
+        if (UserSettings.DualDefault)
+        {
+          UserSettings.LockedInputCommsDeviceId = input.DeviceID;
+        }
+        input.Dispose();
+      }
+
+      if (!UserSettings.DualDefault &&
+          string.IsNullOrEmpty(UserSettings.LockedInputCommsDeviceId) &&
+          TryGetDefaultEndpoint(DataFlow.Capture, Role.Communications, out var inputComms))
+      {
+        UserSettings.LockedInputCommsDeviceId = inputComms.DeviceID;
+        inputComms.Dispose();
+      }
+    }
+
     public static void EnforceLockedDevice()
     {
       if (!UserSettings.PreventAutoSwitch)
@@ -144,52 +221,25 @@ namespace ALsSoundSwitcher
 
       try
       {
-        // check output default
-        if (!string.IsNullOrEmpty(UserSettings.LockedOutputDefaultDeviceId))
+        if (UserSettings.DualDefault)
         {
-          var current = GetCurrentDefaultOutputDevice();
-          if (current.DeviceID != UserSettings.LockedOutputDefaultDeviceId)
-          {
-            var args = UserSettings.DualDefault
-              ? UserSettings.LockedOutputDefaultDeviceId
-              : UserSettings.LockedOutputDefaultDeviceId + " default";
-            ProcessUtils.RunExe(SetDeviceExe, args);
-          }
-          current.Dispose();
+          RestoreOutputLock(FirstLock(UserSettings.LockedOutputDefaultDeviceId, UserSettings.LockedOutputCommsDeviceId), Role.Multimedia, true);
+          RestoreInputLock(
+            FirstLock(UserSettings.LockedInputDefaultDeviceId, UserSettings.LockedInputCommsDeviceId),
+            Role.Multimedia,
+            PowerShellUtils.InputDeviceRoleSwitch.Both);
         }
-
-        // check output comms (only relevant when DualDefault is off and a separate comms device is set)
-        if (!UserSettings.DualDefault && !string.IsNullOrEmpty(UserSettings.LockedOutputCommsDeviceId))
+        else
         {
-          var args = UserSettings.LockedOutputCommsDeviceId + " comms";
-          ProcessUtils.RunExe(SetDeviceExe, args);
-        }
-
-        // check input default
-        if (!string.IsNullOrEmpty(UserSettings.LockedInputDefaultDeviceId))
-        {
-          var current = GetCurrentDefaultInputDevice();
-          if (current.DeviceID != UserSettings.LockedInputDefaultDeviceId)
-          {
-            if (UserSettings.DualDefault)
-            {
-              PowerShellUtils.SetInputDeviceCmdlet(UserSettings.LockedInputDefaultDeviceId);
-            }
-            else
-            {
-              PowerShellUtils.SetInputDeviceCmdlet(
-                UserSettings.LockedInputDefaultDeviceId,
-                PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly);
-            }
-          }
-          current.Dispose();
-        }
-
-        // check input comms (only relevant when DualDefault is off)
-        if (!UserSettings.DualDefault && !string.IsNullOrEmpty(UserSettings.LockedInputCommsDeviceId))
-        {
-          PowerShellUtils.SetInputDeviceCmdlet(
+          RestoreOutputLock(UserSettings.LockedOutputDefaultDeviceId, Role.Multimedia, false);
+          RestoreOutputLock(UserSettings.LockedOutputCommsDeviceId, Role.Communications, false);
+          RestoreInputLock(
+            UserSettings.LockedInputDefaultDeviceId,
+            Role.Multimedia,
+            PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly);
+          RestoreInputLock(
             UserSettings.LockedInputCommsDeviceId,
+            Role.Communications,
             PowerShellUtils.InputDeviceRoleSwitch.CommsOnly);
         }
       }
@@ -199,23 +249,99 @@ namespace ALsSoundSwitcher
       }
     }
 
-    public static void EnforceLockedVolumes()
+    private static string FirstLock(string primary, string fallback)
     {
-      if (!UserSettings.LockVolume || UserSettings.LockedVolumes == null || UserSettings.LockedVolumes.Count == 0)
+      return !string.IsNullOrEmpty(primary) ? primary : fallback;
+    }
+
+    private static void RestoreOutputLock(string lockedDeviceId, Role role, bool setBothRoles)
+    {
+      if (string.IsNullOrEmpty(lockedDeviceId))
       {
         return;
       }
 
-      foreach (var kvp in UserSettings.LockedVolumes.ToList())
+      var matches = EndpointMatches(DataFlow.Render, role, lockedDeviceId);
+      if (setBothRoles)
       {
-        var deviceId = kvp.Key;
-        var targetLevel = kvp.Value;
+        matches = matches && EndpointMatches(DataFlow.Render, Role.Communications, lockedDeviceId);
+      }
 
-        var currentLevel = GetDeviceLevel(deviceId);
-        if (Math.Abs(currentLevel - targetLevel) >= 2)
+      if (matches)
+      {
+        return;
+      }
+
+      BeginOwnedDeviceChange();
+      var args = setBothRoles ? lockedDeviceId : lockedDeviceId + (role == Role.Communications ? " comms" : " default");
+      ProcessUtils.RunExe(SetDeviceExe, args);
+    }
+
+    private static void RestoreInputLock(string lockedDeviceId, Role role, PowerShellUtils.InputDeviceRoleSwitch roleSwitch)
+    {
+      if (string.IsNullOrEmpty(lockedDeviceId))
+      {
+        return;
+      }
+
+      var matches = EndpointMatches(DataFlow.Capture, role, lockedDeviceId);
+      if (roleSwitch == PowerShellUtils.InputDeviceRoleSwitch.Both)
+      {
+        matches = matches && EndpointMatches(DataFlow.Capture, Role.Communications, lockedDeviceId);
+      }
+
+      if (matches || !PowerShellUtils.AudioCmdletsAreInstalled())
+      {
+        return;
+      }
+
+      BeginOwnedDeviceChange();
+      PowerShellUtils.SetInputDeviceCmdlet(lockedDeviceId, roleSwitch);
+    }
+
+    private static bool EndpointMatches(DataFlow flow, Role role, string deviceId)
+    {
+      if (!TryGetDefaultEndpoint(flow, role, out var current))
+      {
+        return false;
+      }
+
+      var matches = current.DeviceID == deviceId;
+      current.Dispose();
+      return matches;
+    }
+
+    private static bool _enforcingVolumes;
+
+    public static void EnforceLockedVolumes()
+    {
+      if (_enforcingVolumes || !UserSettings.LockVolume || UserSettings.LockedVolumes == null || UserSettings.LockedVolumes.Count == 0)
+      {
+        return;
+      }
+
+      _enforcingVolumes = true;
+      try
+      {
+        foreach (var kvp in UserSettings.LockedVolumes.ToList())
         {
-          SetDeviceLevel(deviceId, targetLevel);
+          var deviceId = kvp.Key;
+          var targetLevel = kvp.Value;
+
+          if (!TryGetDeviceLevel(deviceId, out var currentLevel))
+          {
+            continue;
+          }
+
+          if (Math.Abs(currentLevel - targetLevel) >= 2)
+          {
+            SetDeviceLevel(deviceId, targetLevel);
+          }
         }
+      }
+      finally
+      {
+        _enforcingVolumes = false;
       }
     }
 

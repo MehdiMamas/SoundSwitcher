@@ -30,3 +30,5 @@ GetPlaybackDevices/x64/
 ALsSoundSwitcher_Frontend/packages/
 
 *.user
+
+nuget.exe

@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using ALsSoundSwitcher.Properties;
 using CSCore.CoreAudioAPI;
 using CSCore.Win32;
@@ -40,85 +39,14 @@ namespace ALsSoundSwitcher
     {
       Console.WriteLine(Resources.EndpointNotificationCallback_OnDefaultDeviceChanged, deviceId);
 
-      // determine if this is output or input
-      var isOutput = flow == DataFlow.Render;
-      var isCommsRole = role == Role.Communications;
-      
-      if (Globals.UserSettings.PreventAutoSwitch)
+      if (Globals.ShouldIgnoreDeviceChange())
       {
-        if (isOutput)
-        {
-          string lockedDeviceId;
-          string args;
+        return;
+      }
 
-          if (Globals.UserSettings.DualDefault)
-          {
-            lockedDeviceId = !string.IsNullOrEmpty(Globals.UserSettings.LockedOutputDefaultDeviceId)
-              ? Globals.UserSettings.LockedOutputDefaultDeviceId
-              : Globals.UserSettings.LockedOutputCommsDeviceId;
-            args = lockedDeviceId;
-          }
-          else
-          {
-            lockedDeviceId = isCommsRole
-              ? Globals.UserSettings.LockedOutputCommsDeviceId
-              : Globals.UserSettings.LockedOutputDefaultDeviceId;
-            args = lockedDeviceId + (isCommsRole ? " comms" : " default");
-          }
-
-          if (!string.IsNullOrEmpty(lockedDeviceId))
-          {
-            if (lockedDeviceId == deviceId)
-            {
-              // device is already correct, reset flag and return
-              Globals.WeAreSwitching = false;
-              return;
-            }
-
-            ProcessUtils.RunExe(Globals.SetDeviceExe, args);
-            return;
-          }
-        }
-        else
-        {
-          string lockedDeviceId;
-
-          if (Globals.UserSettings.DualDefault)
-          {
-            lockedDeviceId = !string.IsNullOrEmpty(Globals.UserSettings.LockedInputDefaultDeviceId)
-              ? Globals.UserSettings.LockedInputDefaultDeviceId
-              : Globals.UserSettings.LockedInputCommsDeviceId;
-          }
-          else
-          {
-            lockedDeviceId = isCommsRole
-              ? Globals.UserSettings.LockedInputCommsDeviceId
-              : Globals.UserSettings.LockedInputDefaultDeviceId;
-          }
-
-          if (!string.IsNullOrEmpty(lockedDeviceId))
-          {
-            if (lockedDeviceId == deviceId)
-            {
-              // device is already correct, reset flag and return
-              Globals.WeAreSwitching = false;
-              return;
-            }
-
-            if (Globals.UserSettings.DualDefault)
-            {
-              PowerShellUtils.SetInputDeviceCmdlet(lockedDeviceId);
-            }
-            else
-            {
-              PowerShellUtils.SetInputDeviceCmdlet(
-                lockedDeviceId,
-                isCommsRole ? PowerShellUtils.InputDeviceRoleSwitch.CommsOnly : PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly
-              );
-            }
-            return;
-          }
-        }
+      if (Globals.UserSettings.PreventAutoSwitch && TryRestoreLockedDevice(flow, role, deviceId))
+      {
+        return;
       }
 
       if (LastMonitoredDeviceUpdate == deviceId)
@@ -131,11 +59,71 @@ namespace ALsSoundSwitcher
       if (Globals.WeAreSwitching)
       {
         Globals.WeAreSwitching = false;
+        SyncActiveDeviceMenu(flow == DataFlow.Render, deviceId);
+        return;
+      }
+
+      ProcessUtils.Restart_ThreadSafe();
+    }
+
+    private static bool TryRestoreLockedDevice(DataFlow flow, Role role, string deviceId)
+    {
+      var isOutput = flow == DataFlow.Render;
+      var isCommsRole = role == Role.Communications;
+      var settings = Globals.UserSettings;
+
+      string lockedDeviceId;
+      if (isOutput)
+      {
+        lockedDeviceId = settings.DualDefault
+          ? FirstNonEmpty(settings.LockedOutputDefaultDeviceId, settings.LockedOutputCommsDeviceId)
+          : (isCommsRole ? settings.LockedOutputCommsDeviceId : settings.LockedOutputDefaultDeviceId);
       }
       else
       {
-        ProcessUtils.Restart_ThreadSafe();
+        lockedDeviceId = settings.DualDefault
+          ? FirstNonEmpty(settings.LockedInputDefaultDeviceId, settings.LockedInputCommsDeviceId)
+          : (isCommsRole ? settings.LockedInputCommsDeviceId : settings.LockedInputDefaultDeviceId);
       }
+
+      if (string.IsNullOrEmpty(lockedDeviceId))
+      {
+        return false;
+      }
+
+      SyncActiveDeviceMenu(isOutput, lockedDeviceId);
+
+      if (lockedDeviceId == deviceId)
+      {
+        return true;
+      }
+
+      Globals.BeginOwnedDeviceChange();
+
+      if (isOutput)
+      {
+        var args = settings.DualDefault
+          ? lockedDeviceId
+          : lockedDeviceId + (isCommsRole ? " comms" : " default");
+        ProcessUtils.RunExe(Globals.SetDeviceExe, args);
+        return true;
+      }
+
+      if (!PowerShellUtils.AudioCmdletsAreInstalled())
+      {
+        return true;
+      }
+
+      var roleSwitch = settings.DualDefault
+        ? PowerShellUtils.InputDeviceRoleSwitch.Both
+        : (isCommsRole ? PowerShellUtils.InputDeviceRoleSwitch.CommsOnly : PowerShellUtils.InputDeviceRoleSwitch.DefaultOnly);
+      PowerShellUtils.SetInputDeviceCmdlet(lockedDeviceId, roleSwitch);
+      return true;
+    }
+
+    private static string FirstNonEmpty(string primary, string fallback)
+    {
+      return !string.IsNullOrEmpty(primary) ? primary : fallback;
     }
 
     public void OnPropertyValueChanged(string deviceId, PropertyKey propertyKey)

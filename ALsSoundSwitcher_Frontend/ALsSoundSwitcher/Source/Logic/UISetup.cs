@@ -235,36 +235,48 @@ namespace ALsSoundSwitcher
     public static void SetupLockDeviceSubmenu()
     {
       MenuItemLockDevice.DropDownItems.Clear();
-      
-      // add output devices
-      foreach (var device in ActiveOutputDevices)
-      {
-        var deviceItem = new ToolStripMenuItem(OutputPrefix + device.Key);
-        deviceItem.Tag = device.Value;
-        deviceItem.Click += menuItemLockDevice_Click;
-        MenuItemLockDevice.DropDownItems.Add(deviceItem);
-      }
-      
-      // add separator
+
+      AddLockDeviceEntries(ActiveOutputDevices, OutputPrefix, true);
+
       if (ActiveOutputDevices.Count > 0 && ActiveInputDevices.Count > 0)
       {
         MenuItemLockDevice.DropDownItems.Add("-");
       }
-      
-      // add input devices
-      foreach (var device in ActiveInputDevices)
-      {
-        var deviceItem = new ToolStripMenuItem(InputPrefix + device.Key);
-        deviceItem.Tag = device.Value;
-        deviceItem.Click += menuItemLockDevice_Click;
-        MenuItemLockDevice.DropDownItems.Add(deviceItem);
-      }
-      
-      // add clear option
+
+      AddLockDeviceEntries(ActiveInputDevices, InputPrefix, false);
+
       MenuItemLockDevice.DropDownItems.Add("-");
       var clearDeviceItem = new ToolStripMenuItem("Clear All");
       clearDeviceItem.Click += menuItemLockDeviceClear_Click;
       MenuItemLockDevice.DropDownItems.Add(clearDeviceItem);
+    }
+
+    private static void AddLockDeviceEntries(Dictionary<string, string> devices, string prefix, bool isOutput)
+    {
+      foreach (var device in devices)
+      {
+        if (UserSettings.DualDefault)
+        {
+          var deviceItem = new ToolStripMenuItem(prefix + device.Key);
+          deviceItem.Tag = device.Value;
+          deviceItem.Click += menuItemLockDevice_Click;
+          MenuItemLockDevice.DropDownItems.Add(deviceItem);
+          continue;
+        }
+
+        var parent = new ToolStripMenuItem(prefix + device.Key);
+        var defaultItem = new ToolStripMenuItem("Default");
+        defaultItem.Tag = new DeviceLockSelection(device.Value, isOutput, false);
+        defaultItem.Click += menuItemLockDeviceRole_Click;
+
+        var commsItem = new ToolStripMenuItem("Communications");
+        commsItem.Tag = new DeviceLockSelection(device.Value, isOutput, true);
+        commsItem.Click += menuItemLockDeviceRole_Click;
+
+        parent.DropDownItems.Add(defaultItem);
+        parent.DropDownItems.Add(commsItem);
+        MenuItemLockDevice.DropDownItems.Add(parent);
+      }
     }
 
     private static void SetupMouseControlsSubmenu()
@@ -619,16 +631,16 @@ namespace ALsSoundSwitcher
 
     public static void SetBackgroundForMenuItemLockDevice()
     {
+      var commsColor = !Theme.ColorCheckSquare.IsEmpty
+        ? Theme.ColorCheckSquare
+        : System.Drawing.Color.FromArgb(0, 122, 204);
+
       foreach (var item in MenuItemLockDevice.DropDownItems.OfType<ToolStripMenuItem>())
       {
         item.ResetBackColor();
 
-        var deviceId = (string)item.Tag;
-        if (deviceId == null) continue;
-
-        if (UserSettings.DualDefault)
+        if (item.Tag is string deviceId)
         {
-          // single-color highlight when DualDefault is ON
           if (deviceId == UserSettings.LockedOutputDefaultDeviceId ||
               deviceId == UserSettings.LockedOutputCommsDeviceId ||
               deviceId == UserSettings.LockedInputDefaultDeviceId ||
@@ -636,32 +648,23 @@ namespace ALsSoundSwitcher
           {
             item.BackColor = Theme.ActiveSelectionColor;
           }
+          continue;
         }
-        else
+
+        var anyChildLocked = false;
+        foreach (var child in item.DropDownItems.OfType<ToolStripMenuItem>())
         {
-          // DualDefault OFF: Default lock and Comms lock use different colors
-          var isDefaultLock = deviceId == UserSettings.LockedOutputDefaultDeviceId ||
-                              deviceId == UserSettings.LockedInputDefaultDeviceId;
-          var isCommsLock = deviceId == UserSettings.LockedOutputCommsDeviceId ||
-                            deviceId == UserSettings.LockedInputCommsDeviceId;
+          child.ResetBackColor();
+          if (child.Tag is DeviceLockSelection selection && IsRoleLocked(selection))
+          {
+            child.BackColor = selection.IsComms ? commsColor : Theme.ActiveSelectionColor;
+            anyChildLocked = true;
+          }
+        }
 
-          var commsColor = !Theme.ColorCheckSquare.IsEmpty
-            ? Theme.ColorCheckSquare
-            : System.Drawing.Color.FromArgb(0, 122, 204);
-
-          // if both roles are set to the same device, show the comms color so the second click is visible
-          if (isDefaultLock && isCommsLock)
-          {
-            item.BackColor = commsColor;
-          }
-          else if (isDefaultLock)
-          {
-            item.BackColor = Theme.ActiveSelectionColor;
-          }
-          else if (isCommsLock)
-          {
-            item.BackColor = commsColor;
-          }
+        if (anyChildLocked)
+        {
+          item.BackColor = Theme.ActiveSelectionColor;
         }
       }
     }
